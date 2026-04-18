@@ -1,11 +1,11 @@
 import pytest
 
-from hoynatski import DAG
-from hoynatski.core.state import DagRunState
-from hoynatski.executor.executor import Executor
-from hoynatski.queue.queue import InMemoryQueue
-from hoynatski.scheduler.scheduler import Scheduler
-from hoynatski.storage.sqlite_store import SQLiteStateStore
+from orbiter import DAG
+from orbiter.core.state import DagRunState
+from orbiter.executor.executor import Executor
+from orbiter.queue.queue import InMemoryQueue
+from orbiter.scheduler.scheduler import Scheduler
+from orbiter.storage.sqlite_store import SQLiteStateStore
 
 
 @pytest.mark.asyncio

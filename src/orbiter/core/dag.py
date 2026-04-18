@@ -4,9 +4,9 @@ import hashlib
 from collections import defaultdict, deque
 from typing import Any, Callable
 
-from hoynatski.core.exceptions import DAGValidationError
-from hoynatski.core.task import Task, TaskFn
-from hoynatski.retry.backoff import RetryPolicy
+from orbiter.core.exceptions import DAGValidationError
+from orbiter.core.task import Task, TaskFn
+from orbiter.retry.backoff import RetryPolicy
 
 
 class DAG:

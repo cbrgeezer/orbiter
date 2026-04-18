@@ -10,14 +10,14 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from hoynatski.core.dag import DAG
-from hoynatski.executor.executor import Executor
-from hoynatski.queue.queue import InMemoryQueue
-from hoynatski.scheduler.scheduler import Scheduler
-from hoynatski.storage.sqlite_store import SQLiteStateStore
+from orbiter.core.dag import DAG
+from orbiter.executor.executor import Executor
+from orbiter.queue.queue import InMemoryQueue
+from orbiter.scheduler.scheduler import Scheduler
+from orbiter.storage.sqlite_store import SQLiteStateStore
 
 
-app = typer.Typer(help="Hoynatski workflow engine")
+app = typer.Typer(help="Orbiter workflow engine")
 console = Console()
 
 
@@ -30,11 +30,11 @@ def _load_dag(path: Path, symbol: str = "dag") -> DAG:
     """
     if not path.exists():
         raise typer.BadParameter(f"file not found: {path}")
-    spec = importlib.util.spec_from_file_location("hoynatski_user_dag", path)
+    spec = importlib.util.spec_from_file_location("orbiter_user_dag", path)
     if spec is None or spec.loader is None:
         raise typer.BadParameter(f"cannot import {path}")
     module = importlib.util.module_from_spec(spec)
-    sys.modules["hoynatski_user_dag"] = module
+    sys.modules["orbiter_user_dag"] = module
     spec.loader.exec_module(module)
     dag = getattr(module, symbol, None)
     if not isinstance(dag, DAG):
@@ -120,7 +120,7 @@ def serve(
     """Serve the REST API for a DAG."""
     import uvicorn
 
-    from hoynatski.api.server import build_app
+    from orbiter.api.server import build_app
 
     dag = _load_dag(file, symbol)
     uvicorn.run(build_app(dag, db_path=db, concurrency=concurrency), host=host, port=port)

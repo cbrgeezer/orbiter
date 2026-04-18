@@ -1,6 +1,6 @@
 import random
 
-from hoynatski.retry.backoff import RetryPolicy, compute_delay
+from orbiter.retry.backoff import RetryPolicy, compute_delay
 
 
 def test_exponential_backoff_grows():

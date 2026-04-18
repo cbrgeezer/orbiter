@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 import random
 
-from hoynatski import DAG, RetryPolicy
+from orbiter import DAG, RetryPolicy
 
 
 dag = DAG(name="etl_example", description="A tiny ETL pipeline")

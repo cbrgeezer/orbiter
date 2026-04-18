@@ -11,13 +11,13 @@ system does not yet know it. On restart the scheduler re-dispatches.
 
 import pytest
 
-from hoynatski import DAG, RetryPolicy
-from hoynatski.core.state import DagRunState, TaskState
-from hoynatski.executor.executor import Executor
-from hoynatski.executor.worker import FaultInjector
-from hoynatski.queue.queue import InMemoryQueue
-from hoynatski.scheduler.scheduler import Scheduler
-from hoynatski.storage.sqlite_store import SQLiteStateStore
+from orbiter import DAG, RetryPolicy
+from orbiter.core.state import DagRunState, TaskState
+from orbiter.executor.executor import Executor
+from orbiter.executor.worker import FaultInjector
+from orbiter.queue.queue import InMemoryQueue
+from orbiter.scheduler.scheduler import Scheduler
+from orbiter.storage.sqlite_store import SQLiteStateStore
 
 
 @pytest.mark.asyncio

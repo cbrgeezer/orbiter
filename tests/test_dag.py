@@ -1,7 +1,7 @@
 import pytest
 
-from hoynatski import DAG
-from hoynatski.core.exceptions import DAGValidationError
+from orbiter import DAG
+from orbiter.core.exceptions import DAGValidationError
 
 
 def test_dag_validates_ok():

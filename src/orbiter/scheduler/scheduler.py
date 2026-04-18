@@ -4,13 +4,13 @@ import asyncio
 import logging
 from typing import Any
 
-from hoynatski.core.dag import DAG
-from hoynatski.core.state import DagRunState, TaskState, TERMINAL_TASK_STATES
-from hoynatski.queue.queue import Queue, QueueMessage
-from hoynatski.storage.sqlite_store import StateStore
+from orbiter.core.dag import DAG
+from orbiter.core.state import DagRunState, TaskState, TERMINAL_TASK_STATES
+from orbiter.queue.queue import Queue, QueueMessage
+from orbiter.storage.sqlite_store import StateStore
 
 
-log = logging.getLogger("hoynatski.scheduler")
+log = logging.getLogger("orbiter.scheduler")
 
 
 class Scheduler:

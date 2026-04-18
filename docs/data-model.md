@@ -2,7 +2,7 @@
 
 The state store owns five tables. All of them live in a single SQLite file
 (or in a Postgres schema in multi-node mode). This document describes the
-contract; the exact DDL is in `src/hoynatski/storage/schema.sql`.
+contract; the exact DDL is in `src/orbiter/storage/schema.sql`.
 
 ## `dags`
 

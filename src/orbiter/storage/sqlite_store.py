@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Protocol
 
-from hoynatski.core.state import DagRunState, TaskState
+from orbiter.core.state import DagRunState, TaskState
 
 
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"

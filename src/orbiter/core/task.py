@@ -5,7 +5,7 @@ import inspect
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable, Union
 
-from hoynatski.retry.backoff import RetryPolicy
+from orbiter.retry.backoff import RetryPolicy
 
 
 TaskFn = Union[Callable[..., Any], Callable[..., Awaitable[Any]]]

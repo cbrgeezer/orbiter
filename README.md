@@ -1,10 +1,10 @@
-# Hoynatski
+# Orbiter
 
 > Distributed workflow / data processing engine — DAGs with retries, backoff,
 > idempotency, checkpointing, and scheduling. Somewhere between a lightweight
 > Airflow, Prefect, and Celery, with an opinionated architecture.
 
-Hoynatski is a Python engine for defining and running workflows as directed
+Orbiter is a Python engine for defining and running workflows as directed
 acyclic graphs (DAGs). It is intentionally small enough to read in an
 afternoon and honest about what it does and does not guarantee.
 
@@ -13,7 +13,7 @@ afternoon and honest about what it does and does not guarantee.
 ## Why another one?
 
 Airflow, Prefect, Dagster, Celery, Luigi — the space is crowded. The point of
-Hoynatski is not to compete with them but to make the *execution semantics*
+Orbiter is not to compete with them but to make the *execution semantics*
 legible. Most workflow engines hide their at-least-once vs exactly-once
 assumptions behind marketing language. This project writes them down.
 
@@ -66,7 +66,7 @@ See [`docs/architecture.md`](docs/architecture.md) for the long form.
 
 ## Execution semantics
 
-This is the part most engines paper over. Hoynatski is explicit:
+This is the part most engines paper over. Orbiter is explicit:
 
 - **Default delivery:** at-least-once. A worker crash after task execution but
   before the state transition is persisted results in a re-run.
@@ -141,13 +141,13 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 
 # Validate an example DAG
-hoynatski validate examples/example_dag.py
+orbiter validate examples/example_dag.py
 
 # Run it locally
-hoynatski run examples/example_dag.py
+orbiter run examples/example_dag.py
 
 # Start the API
-hoynatski serve --host 0.0.0.0 --port 8000
+orbiter serve --host 0.0.0.0 --port 8000
 ```
 
 ---

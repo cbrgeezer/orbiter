@@ -38,7 +38,7 @@
 
 - Visual DAG designer. There are better tools for this.
 - Multi-tenant RBAC. If you need it, put this behind a reverse proxy with
-  an auth layer; Hoynatski is a library, not a platform.
+  an auth layer; Orbiter is a library, not a platform.
 - Arbitrary distributed transactions. See `docs/execution-semantics.md`.
 
 ## Profiling notes

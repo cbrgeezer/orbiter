@@ -2,7 +2,7 @@
 
 ## One-screen summary
 
-Hoynatski splits the problem into five roles. Each role is a module; each
+Orbiter splits the problem into five roles. Each role is a module; each
 module does one thing.
 
 | Role        | Responsibility                                                |

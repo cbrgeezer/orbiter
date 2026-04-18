@@ -1,4 +1,4 @@
--- Hoynatski state store schema. Kept small on purpose.
+-- Orbiter state store schema. Kept small on purpose.
 -- The four tables in the README data-model section map 1:1 to these.
 
 CREATE TABLE IF NOT EXISTS dags (

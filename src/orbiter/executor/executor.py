@@ -4,13 +4,13 @@ import asyncio
 import logging
 from typing import Any
 
-from hoynatski.core.dag import DAG
-from hoynatski.executor.worker import Worker
-from hoynatski.queue.queue import Queue
-from hoynatski.storage.sqlite_store import StateStore
+from orbiter.core.dag import DAG
+from orbiter.executor.worker import Worker
+from orbiter.queue.queue import Queue
+from orbiter.storage.sqlite_store import StateStore
 
 
-log = logging.getLogger("hoynatski.executor")
+log = logging.getLogger("orbiter.executor")
 
 
 class Executor:

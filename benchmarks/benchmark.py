@@ -14,11 +14,11 @@ import argparse
 import asyncio
 import time
 
-from hoynatski import DAG
-from hoynatski.executor.executor import Executor
-from hoynatski.queue.queue import InMemoryQueue
-from hoynatski.scheduler.scheduler import Scheduler
-from hoynatski.storage.sqlite_store import SQLiteStateStore
+from orbiter import DAG
+from orbiter.executor.executor import Executor
+from orbiter.queue.queue import InMemoryQueue
+from orbiter.scheduler.scheduler import Scheduler
+from orbiter.storage.sqlite_store import SQLiteStateStore
 
 
 def build_fanout_dag(n: int) -> DAG:

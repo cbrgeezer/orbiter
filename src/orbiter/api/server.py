@@ -5,11 +5,11 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-from hoynatski.core.dag import DAG
-from hoynatski.executor.executor import Executor
-from hoynatski.queue.queue import InMemoryQueue
-from hoynatski.scheduler.scheduler import Scheduler
-from hoynatski.storage.sqlite_store import SQLiteStateStore
+from orbiter.core.dag import DAG
+from orbiter.executor.executor import Executor
+from orbiter.queue.queue import InMemoryQueue
+from orbiter.scheduler.scheduler import Scheduler
+from orbiter.storage.sqlite_store import SQLiteStateStore
 
 
 class SubmitRequest(BaseModel):
@@ -23,7 +23,7 @@ def build_app(dag: DAG, *, db_path: str = ":memory:", concurrency: int = 4) -> F
     by shared Postgres. This skeleton keeps it to one DAG and in-memory SQLite
     to make the surface obvious.
     """
-    app = FastAPI(title="Hoynatski", version="0.1.0")
+    app = FastAPI(title="Orbiter", version="0.1.0")
     store = SQLiteStateStore(db_path)
     queue = InMemoryQueue()
     scheduler = Scheduler(dag, queue, store)

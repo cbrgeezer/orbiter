@@ -7,15 +7,15 @@ import traceback
 import uuid
 from typing import Any
 
-from hoynatski.core.dag import DAG
-from hoynatski.core.exceptions import PermanentTaskError
-from hoynatski.core.state import TaskState
-from hoynatski.queue.queue import Queue, QueueMessage
-from hoynatski.retry.backoff import compute_delay
-from hoynatski.storage.sqlite_store import StateStore
+from orbiter.core.dag import DAG
+from orbiter.core.exceptions import PermanentTaskError
+from orbiter.core.state import TaskState
+from orbiter.queue.queue import Queue, QueueMessage
+from orbiter.retry.backoff import compute_delay
+from orbiter.storage.sqlite_store import StateStore
 
 
-log = logging.getLogger("hoynatski.worker")
+log = logging.getLogger("orbiter.worker")
 
 
 class Worker:
