@@ -5,24 +5,30 @@
 - **No cross-process queue backend.** The in-memory queue is an
   `asyncio.Event` primitive; it cannot be shared. The SQLite queue works
   across processes on one host but degrades to polling.
-- **No Postgres backend yet.** `SQLiteStateStore` is the only implementation.
+- **No queue broker beyond the database itself yet.** PostgreSQL is now supported as a state store, but there is still no Redis or external broker backend.
   The `StateStore` protocol is small enough that a Postgres version is a
   clear win, it just is not written.
 - **No backfill / catchup.** Scheduled DAGs only run forward. Running "last
   Tuesday's run" is not supported.
 - **No DAG versioning UX.** The fingerprint changes on any definition edit;
   there is no concept of a compatible migration.
-- **Web UI is a placeholder.** Only `/healthz`, `/dag`, `/runs` exist.
+- **Web UI is a placeholder.** The API now exposes `/healthz`, `/dag`, `/runs`, run cancellation, and `/metrics`, but there is still no browser based operator console.
 - **No authentication on the API.** Intended behind a reverse proxy.
 - **No distributed tracing.** Structured logs only.
 
 ## Near-term
 
-- [ ] Postgres state store (keeps the same protocol).
+- [x] PostgreSQL state store behind the same runtime protocol.
 - [ ] Redis queue backend with pub/sub wakeups (removes polling tax
       across processes).
+- [x] Interval based recurring schedules with pause, resume, and run-now control.
 - [ ] Cron-like scheduler for recurring DAG runs.
-- [ ] CLI `validate` warnings for tasks without a timeout.
+- [ ] Overlap policies for recurring runs.
+- [ ] Catchup and backfill semantics.
+- [x] CLI `validate` warnings for tasks without a timeout.
+- [x] Task context carrying run metadata, params, checkpoints, and logger bindings.
+- [x] Basic run control: list runs, inspect runs, and cancel active runs.
+- [x] Lightweight Prometheus style metrics endpoint.
 - [ ] `task.resources` hint for the worker pool so CPU-bound tasks can pin
       to a subset of workers.
 
@@ -33,6 +39,7 @@
 - [ ] Pluggable secrets provider for task params.
 - [ ] OpenTelemetry spans around every state transition.
 - [ ] Structured per-task logs streamed into the state store.
+- [ ] Browser based operator console for runs and schedules.
 
 ## Out of scope, by choice
 

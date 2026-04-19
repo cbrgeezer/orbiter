@@ -1,21 +1,18 @@
--- Orbiter state store schema. Kept small on purpose.
--- The four tables in the README data-model section map 1:1 to these.
-
 CREATE TABLE IF NOT EXISTS dags (
     fingerprint TEXT PRIMARY KEY,
     name        TEXT NOT NULL,
-    definition  TEXT NOT NULL,
-    created_at  REAL NOT NULL
+    definition  JSONB NOT NULL,
+    created_at  DOUBLE PRECISION NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS dag_runs (
     id               TEXT PRIMARY KEY,
     dag_fingerprint  TEXT NOT NULL REFERENCES dags(fingerprint),
     state            TEXT NOT NULL,
-    started_at       REAL,
-    finished_at      REAL,
+    started_at       DOUBLE PRECISION,
+    finished_at      DOUBLE PRECISION,
     trigger          TEXT,
-    params_json      TEXT
+    params_json      JSONB
 );
 
 CREATE INDEX IF NOT EXISTS idx_dag_runs_state ON dag_runs(state);
@@ -27,35 +24,33 @@ CREATE TABLE IF NOT EXISTS task_runs (
     attempt          INTEGER NOT NULL,
     state            TEXT NOT NULL,
     idempotency_key  TEXT NOT NULL,
-    scheduled_at     REAL,
-    started_at       REAL,
-    finished_at      REAL,
+    scheduled_at     DOUBLE PRECISION,
+    started_at       DOUBLE PRECISION,
+    finished_at      DOUBLE PRECISION,
     error            TEXT,
-    output_json      TEXT,
+    output_json      JSONB,
     UNIQUE (dag_run_id, task_id, attempt),
     UNIQUE (idempotency_key)
 );
 
-CREATE INDEX IF NOT EXISTS idx_task_runs_state     ON task_runs(state);
-CREATE INDEX IF NOT EXISTS idx_task_runs_dag_run   ON task_runs(dag_run_id);
+CREATE INDEX IF NOT EXISTS idx_task_runs_state ON task_runs(state);
+CREATE INDEX IF NOT EXISTS idx_task_runs_dag_run ON task_runs(dag_run_id);
 
 CREATE TABLE IF NOT EXISTS checkpoints (
     dag_run_id  TEXT NOT NULL REFERENCES dag_runs(id),
     task_id     TEXT NOT NULL,
     key         TEXT NOT NULL,
-    value_json  TEXT NOT NULL,
-    written_at  REAL NOT NULL,
+    value_json  JSONB NOT NULL,
+    written_at  DOUBLE PRECISION NOT NULL,
     PRIMARY KEY (dag_run_id, task_id, key)
 );
 
--- Work queue. We use a table here instead of a separate broker for the
--- single-node case. The `lease_until` column gives us a visibility timeout.
 CREATE TABLE IF NOT EXISTS queue_items (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    id            BIGSERIAL PRIMARY KEY,
     task_run_id   TEXT NOT NULL REFERENCES task_runs(id),
-    enqueued_at   REAL NOT NULL,
-    available_at  REAL NOT NULL,
-    lease_until   REAL,
+    enqueued_at   DOUBLE PRECISION NOT NULL,
+    available_at  DOUBLE PRECISION NOT NULL,
+    lease_until   DOUBLE PRECISION,
     leased_by     TEXT
 );
 
@@ -68,11 +63,11 @@ CREATE TABLE IF NOT EXISTS schedules (
     state            TEXT NOT NULL,
     overlap_policy   TEXT NOT NULL DEFAULT 'allow',
     interval_seconds INTEGER NOT NULL,
-    next_run_at      REAL NOT NULL,
-    last_run_at      REAL,
+    next_run_at      DOUBLE PRECISION NOT NULL,
+    last_run_at      DOUBLE PRECISION,
     last_run_id      TEXT REFERENCES dag_runs(id),
-    params_json      TEXT,
-    created_at       REAL NOT NULL
+    params_json      JSONB,
+    created_at       DOUBLE PRECISION NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_schedules_state_next_run ON schedules(state, next_run_at);

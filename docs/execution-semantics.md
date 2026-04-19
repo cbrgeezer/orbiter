@@ -65,6 +65,10 @@ Checkpoint writes happen in the same SQLite file as state transitions, so
 ordering is consistent: a checkpoint written before a crash is visible on
 restart.
 
+Checkpoints are namespaced by `(dag_run_id, task_id, key)`. A task reads its
+own checkpoints by default. If downstream code needs an upstream checkpoint,
+it should request it explicitly through `TaskContext.get_checkpoint(..., task_id="upstream_task")`.
+
 ## Deduplication: where the key comes from
 
 The idempotency key is `SHA256(base | k1=v1 | k2=v2 | ...)` where:
@@ -90,6 +94,37 @@ UNIQUE insert. Two workers may consume the same queue row; only one holds
 the lease. The state store is the arbiter in both cases. If we let the
 worker be the source of truth, a partitioned worker could report success
 without the scheduler noticing, and the DAG would never converge.
+
+## Cancellation semantics
+
+Cancelling a DAG run is cooperative at the runtime boundary:
+
+1. The DAG run transitions to `cancelled`.
+2. The scheduler stops dispatching new work for that run.
+3. Workers skip queued messages they pick up after cancellation.
+4. A task that is already running is not forcibly interrupted by the runtime.
+
+This is deliberate. Hard killing arbitrary user code is not safe in a
+generic Python workflow engine. If a task needs stronger cancellation
+behaviour, the task body should poll `context.is_cancelled` and stop its own
+work cleanly.
+
+## Schedule semantics
+
+Recurring schedules create normal DAG runs. After a run exists, there is no
+special execution path for "scheduled" work. The scheduler, queue, workers,
+state transitions, retries, and checkpoints behave exactly as they do for a
+manually submitted run.
+
+Today the schedule model is intentionally simple:
+
+1. interval based timing only
+2. overlap policies are `allow`, `forbid`, and `replace`
+3. no catchup
+4. no hard real-time guarantees
+
+This keeps the semantics legible while the runtime remains single node and
+SQLite backed.
 
 ## Summary table
 

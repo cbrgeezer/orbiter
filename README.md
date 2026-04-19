@@ -1,157 +1,112 @@
-# Orbiter
+**Orbiter**
 
-> Distributed workflow / data processing engine — DAGs with retries, backoff,
-> idempotency, checkpointing, and scheduling. Somewhere between a lightweight
-> Airflow, Prefect, and Celery, with an opinionated architecture.
+Overview
 
-Orbiter is a Python engine for defining and running workflows as directed
-acyclic graphs (DAGs). It is intentionally small enough to read in an
-afternoon and honest about what it does and does not guarantee.
+Orbiter is a Python workflow engine for defining and running directed acyclic graphs. It focuses on legible execution semantics, small enough code to study in an afternoon, and honest guarantees around retries, checkpointing, idempotency, and scheduling.
 
----
+Why this exists
 
-## Why another one?
+The workflow space is crowded, but many tools hide their real guarantees behind marketing language. Orbiter exists to make those choices explicit and readable.
 
-Airflow, Prefect, Dagster, Celery, Luigi — the space is crowded. The point of
-Orbiter is not to compete with them but to make the *execution semantics*
-legible. Most workflow engines hide their at-least-once vs exactly-once
-assumptions behind marketing language. This project writes them down.
+Feature summary
 
-If you are looking for a production scheduler, run Prefect. If you want to
-understand *how* a scheduler is built and what choices it makes, read this.
+1. Declarative DAG definition in Python or YAML.
+2. Async scheduler with pluggable queue backends.
+3. Worker pool built on `asyncio` with configurable concurrency.
+4. Retry policies with backoff, jitter, and maximum attempt limits.
+5. Idempotency support through deterministic run keys and deduplication.
+6. Task context with run metadata, input params, checkpoints, and per task logging.
+7. Checkpointing with SQL backed task state.
+8. Recurring schedules with pause, resume, run-now, and overlap policies.
+9. Run inspection, cancellation, and lightweight metrics.
+10. SQLite and PostgreSQL state stores behind a shared runtime interface.
+11. In memory and durable store backed queue modes behind the same queue interface.
+12. REST API built with FastAPI.
+13. CLI for local execution, DAG validation, and queue inspection.
+14. Plugin support for operators and queue backends.
+15. Fault injection tooling for recovery testing.
 
----
+Architecture
 
-## Feature summary
+The system is organised around a DAG parser, an async scheduler, a queue layer, a state store, and a worker pool. See [`docs/architecture.md`](docs/architecture.md) for the full design.
 
-- Declarative DAG definition (Python decorators or YAML).
-- Async scheduler with pluggable queue backends.
-- Worker pool based on `asyncio` with configurable concurrency.
-- Retry policies: exponential backoff with jitter, max attempts, dead-letter.
-- Task idempotency via deterministic run keys and deduplication.
-- Checkpointing: task state persisted in SQL after every transition.
-- REST API (FastAPI) for submission and inspection.
-- CLI for local runs, DAG validation, and queue inspection.
-- Plugin architecture for custom operators and queue backends.
-- Fault injection harness for testing recovery paths.
+Execution semantics
 
----
+1. Default delivery is at least once. A worker crash after execution but before persistence can trigger a retry.
+2. Apparent exactly once behaviour depends on user supplied idempotency keys and idempotent side effects.
+3. The checkpoint boundary is the persisted state transition. Recovery logic handles crashes between output writing, state persistence, and acknowledgement.
 
-## Architecture diagram
+Current runtime capabilities
 
+1. Tasks can receive a `TaskContext` object for run metadata, params, checkpoints, and structured logging.
+2. CLI validation warns when tasks are missing timeouts.
+3. The API exposes run listing, run cancellation, recurring schedules, and a simple Prometheus style metrics endpoint.
+4. The same runtime can use SQLite for local work or PostgreSQL for a more production shaped deployment.
+5. Queue mode can be chosen between low latency in memory execution and a durable store backed queue.
+
+Quick example
+
+```python
+from orbiter import DAG, RetryPolicy, TaskContext
+
+dag = DAG("example")
+
+@dag.task(retry=RetryPolicy(max_attempts=3), timeout_seconds=30)
+async def fetch(context: TaskContext) -> dict:
+    rows = context.param("rows", 100)
+    context.checkpoint("source", {"rows": rows})
+    return {"rows": rows}
+
+@dag.task(depends_on=["fetch"], timeout_seconds=30)
+async def load(context: TaskContext) -> str:
+    source = context.get_checkpoint("source", task_id="fetch", default={"rows": 0})
+    return f"loaded {source['rows']} rows"
 ```
-                   +-----------------+
-                   |     CLI / API   |
-                   +--------+--------+
-                            |
-                            v
-  +---------+       +---------------+        +-----------------+
-  |  DAG    | ----> |  Scheduler    | -----> |    Queue        |
-  | parser  |       |  (async loop) |        | (memory / SQL)  |
-  +---------+       +-------+-------+        +--------+--------+
-                            |                         |
-                            v                         v
-                   +-----------------+        +-----------------+
-                   |   State Store   | <----> |   Worker Pool   |
-                   |   (SQLite/PG)   |        |   (asyncio)     |
-                   +--------+--------+        +--------+--------+
-                            ^                         |
-                            |                         v
-                            +---- checkpoints --------+
-```
 
-See [`docs/architecture.md`](docs/architecture.md) for the long form.
-
----
-
-## Execution semantics
-
-This is the part most engines paper over. Orbiter is explicit:
-
-- **Default delivery:** at-least-once. A worker crash after task execution but
-  before the state transition is persisted results in a re-run.
-- **Exactly-once illusion:** available for user code that declares an
-  idempotency key. The scheduler deduplicates re-deliveries against the
-  `task_runs` table before dispatch, but the user-code side-effect is only
-  as idempotent as the user makes it. We do not lie about this.
-- **Checkpointing boundary:** the state transition write is the transactional
-  boundary. Task output is written first, then the state row, then the ack.
-  A crash between steps is recovered by the scheduler on restart.
-
-Full discussion: [`docs/execution-semantics.md`](docs/execution-semantics.md).
-
----
-
-## Data model
-
-Four core tables:
-
-| table         | purpose                                                |
-| ------------- | ------------------------------------------------------ |
-| `dags`        | DAG definitions, versioned by content hash             |
-| `dag_runs`    | A single invocation of a DAG                           |
-| `task_runs`   | Per-task attempt rows, keyed by (dag_run, task, try)   |
-| `checkpoints` | User-visible key/value state written during a run      |
-
-Full schema: [`docs/data-model.md`](docs/data-model.md).
-
----
-
-## Failure scenarios
-
-Covered in tests and documented with recovery behavior in
-[`docs/failure-scenarios.md`](docs/failure-scenarios.md):
-
-- worker crash mid-task,
-- scheduler restart with in-flight tasks,
-- queue redelivery under broker failure,
-- DB transient errors,
-- infinite-retry poison messages,
-- DAG upgrade while a run is in flight.
-
----
-
-## Benchmarks
-
-See `benchmarks/` for a load script that enqueues N no-op tasks across M
-workers and measures throughput and end-to-end latency. Results on the
-reference machine (see `docs/architecture.md`):
-
-- ~6k tasks/sec sustained on a single node with 64 workers and SQLite WAL.
-- Switching to Postgres halves throughput but unlocks multi-node scheduling.
-- Event-driven dispatch has ~8x lower tail latency than 1s polling.
-
----
-
-## Roadmap and limitations
-
-- No true exactly-once delivery. See `docs/execution-semantics.md`.
-- SQLite backend is single-node. Multi-node requires Postgres.
-- Web UI is intentionally minimal — this is a backend project.
-- No DAG backfill or time-range catchup in the first cut.
-
-Full list in [`docs/roadmap.md`](docs/roadmap.md).
-
----
-
-## Quick start
+Run it locally:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-pip install -e ".[dev]"
-
-# Validate an example DAG
-orbiter validate examples/example_dag.py
-
-# Run it locally
-orbiter run examples/example_dag.py
-
-# Start the API
-orbiter serve --host 0.0.0.0 --port 8000
+orbiter run examples/example_dag.py --params '{"rows": 64}'
 ```
 
----
+Recurring schedules
 
-## License
+```bash
+orbiter create-schedule examples/example_dag.py \
+  --name hourly-import \
+  --every-seconds 3600 \
+  --overlap-policy forbid \
+  --db orbiter.db \
+  --params '{"rows": 500}'
 
-MIT.
+orbiter list-schedules orbiter.db
+orbiter pause-schedule orbiter.db <schedule_id>
+orbiter resume-schedule orbiter.db <schedule_id>
+orbiter run-schedule orbiter.db <schedule_id> examples/example_dag.py
+```
+
+See [`docs/scheduling.md`](docs/scheduling.md) for the schedule model and semantics.
+
+Storage backends
+
+SQLite remains the default for local development:
+
+```bash
+orbiter run examples/example_dag.py --db orbiter.db --queue-backend auto
+```
+
+PostgreSQL is selected automatically from the connection string:
+
+```bash
+orbiter run examples/example_dag.py \
+  --db 'postgresql://orbiter:orbiter@localhost:5432/orbiter' \
+  --queue-backend store \
+  --params '{"rows": 64}'
+```
+
+See [`docs/postgres.md`](docs/postgres.md) for the PostgreSQL backend notes.
+See [`docs/queue-backends.md`](docs/queue-backends.md) for queue mode selection.
+
+Positioning
+
+Use Orbiter if you want to understand how a workflow engine is built and what guarantees it really provides. Use a larger platform if you want a broader production feature set out of the box.

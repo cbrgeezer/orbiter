@@ -18,7 +18,13 @@ class StateStore(Protocol):
     """Minimal interface the scheduler needs from the state store."""
 
     def register_dag(self, fingerprint: str, name: str, definition: dict[str, Any]) -> None: ...
-    def create_dag_run(self, dag_fingerprint: str, params: dict[str, Any] | None = None) -> str: ...
+    def create_dag_run(
+        self,
+        dag_fingerprint: str,
+        params: dict[str, Any] | None = None,
+        *,
+        trigger: str | None = None,
+    ) -> str: ...
     def create_task_run(
         self,
         dag_run_id: str,
@@ -36,11 +42,34 @@ class StateStore(Protocol):
     ) -> None: ...
     def set_dag_state(self, dag_run_id: str, state: DagRunState) -> None: ...
     def checkpoint(self, dag_run_id: str, task_id: str, key: str, value: Any) -> None: ...
+    def get_checkpoint(self, dag_run_id: str, task_id: str, key: str) -> Any: ...
     def task_run_by_idem_key(self, key: str) -> dict[str, Any] | None: ...
+    def task_run(self, task_run_id: str) -> dict[str, Any] | None: ...
+    def dag_run(self, dag_run_id: str) -> dict[str, Any] | None: ...
+    def list_dag_runs(self, *, limit: int = 50) -> list[dict[str, Any]]: ...
+    def cancel_dag_run(self, dag_run_id: str) -> bool: ...
+    def state_counts(self) -> dict[str, int]: ...
+    def create_schedule(
+        self,
+        dag_fingerprint: str,
+        name: str,
+        interval_seconds: int,
+        *,
+        overlap_policy: str = "allow",
+        params: dict[str, Any] | None = None,
+        start_at: float | None = None,
+    ) -> str: ...
+    def list_schedules(self, *, limit: int = 100) -> list[dict[str, Any]]: ...
+    def schedule(self, schedule_id: str) -> dict[str, Any] | None: ...
+    def pause_schedule(self, schedule_id: str) -> bool: ...
+    def resume_schedule(self, schedule_id: str) -> bool: ...
+    def trigger_schedule_now(self, schedule_id: str) -> str | None: ...
+    def dispatch_due_schedules(self, *, limit: int = 10, now: float | None = None) -> list[dict[str, Any]]: ...
     def enqueue(self, task_run_id: str, *, available_at: float | None = None) -> None: ...
     def lease(self, worker_id: str, lease_seconds: float) -> dict[str, Any] | None: ...
     def ack(self, queue_item_id: int) -> None: ...
     def reclaim_expired_leases(self, now: float | None = None) -> int: ...
+    def close(self) -> None: ...
 
 
 class SQLiteStateStore:
@@ -58,6 +87,14 @@ class SQLiteStateStore:
     def _init_schema(self) -> None:
         sql = SCHEMA_PATH.read_text()
         self._conn.executescript(sql)
+        cols = {
+            row["name"]
+            for row in self._conn.execute("PRAGMA table_info(schedules)").fetchall()
+        }
+        if "overlap_policy" not in cols:
+            self._conn.execute(
+                "ALTER TABLE schedules ADD COLUMN overlap_policy TEXT NOT NULL DEFAULT 'allow'"
+            )
 
     @contextmanager
     def _tx(self) -> Iterator[sqlite3.Connection]:
@@ -80,18 +117,23 @@ class SQLiteStateStore:
             )
 
     def create_dag_run(
-        self, dag_fingerprint: str, params: dict[str, Any] | None = None
+        self,
+        dag_fingerprint: str,
+        params: dict[str, Any] | None = None,
+        *,
+        trigger: str | None = None,
     ) -> str:
         run_id = str(uuid.uuid4())
         with self._tx() as c:
             c.execute(
-                "INSERT INTO dag_runs(id, dag_fingerprint, state, started_at, params_json) "
-                "VALUES (?,?,?,?,?)",
+                "INSERT INTO dag_runs(id, dag_fingerprint, state, started_at, trigger, params_json) "
+                "VALUES (?,?,?,?,?,?)",
                 (
                     run_id,
                     dag_fingerprint,
                     DagRunState.PENDING.value,
                     time.time(),
+                    trigger,
                     json.dumps(params or {}),
                 ),
             )
@@ -219,11 +261,209 @@ class SQLiteStateStore:
         ).fetchall()
         return [dict(r) for r in rows]
 
+    def task_run(self, task_run_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM task_runs WHERE id=?", (task_run_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
     def dag_run(self, dag_run_id: str) -> dict[str, Any] | None:
         row = self._conn.execute(
             "SELECT * FROM dag_runs WHERE id=?", (dag_run_id,)
         ).fetchone()
         return dict(row) if row else None
+
+    def list_dag_runs(self, *, limit: int = 50) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM dag_runs ORDER BY started_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def cancel_dag_run(self, dag_run_id: str) -> bool:
+        with self._tx() as c:
+            cur = c.execute(
+                "UPDATE dag_runs SET state=?, finished_at=? "
+                "WHERE id=? AND state IN (?,?)",
+                (
+                    DagRunState.CANCELLED.value,
+                    time.time(),
+                    dag_run_id,
+                    DagRunState.PENDING.value,
+                    DagRunState.RUNNING.value,
+                ),
+            )
+            return cur.rowcount > 0
+
+    def state_counts(self) -> dict[str, int]:
+        dag_rows = self._conn.execute(
+            "SELECT state, COUNT(*) AS n FROM dag_runs GROUP BY state"
+        ).fetchall()
+        task_rows = self._conn.execute(
+            "SELECT state, COUNT(*) AS n FROM task_runs GROUP BY state"
+        ).fetchall()
+        counts: dict[str, int] = {}
+        for row in dag_rows:
+            counts[f"dag_runs_{row['state']}"] = row["n"]
+        for row in task_rows:
+            counts[f"task_runs_{row['state']}"] = row["n"]
+        return counts
+
+    def create_schedule(
+        self,
+        dag_fingerprint: str,
+        name: str,
+        interval_seconds: int,
+        *,
+        overlap_policy: str = "allow",
+        params: dict[str, Any] | None = None,
+        start_at: float | None = None,
+    ) -> str:
+        schedule_id = str(uuid.uuid4())
+        now = time.time()
+        first_run_at = start_at if start_at is not None else now + interval_seconds
+        with self._tx() as c:
+            c.execute(
+                "INSERT INTO schedules(id, dag_fingerprint, name, state, overlap_policy, interval_seconds, next_run_at, params_json, created_at) "
+                "VALUES (?,?,?,?,?,?,?,?,?)",
+                (
+                    schedule_id,
+                    dag_fingerprint,
+                    name,
+                    "active",
+                    overlap_policy,
+                    interval_seconds,
+                    first_run_at,
+                    json.dumps(params or {}),
+                    now,
+                ),
+            )
+        return schedule_id
+
+    def list_schedules(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM schedules ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def schedule(self, schedule_id: str) -> dict[str, Any] | None:
+        row = self._conn.execute(
+            "SELECT * FROM schedules WHERE id=?",
+            (schedule_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def pause_schedule(self, schedule_id: str) -> bool:
+        with self._tx() as c:
+            cur = c.execute(
+                "UPDATE schedules SET state='paused' WHERE id=? AND state='active'",
+                (schedule_id,),
+            )
+            return cur.rowcount > 0
+
+    def resume_schedule(self, schedule_id: str) -> bool:
+        with self._tx() as c:
+            cur = c.execute(
+                "UPDATE schedules SET state='active' WHERE id=? AND state='paused'",
+                (schedule_id,),
+            )
+            return cur.rowcount > 0
+
+    def trigger_schedule_now(self, schedule_id: str) -> str | None:
+        now = time.time()
+        with self._tx() as c:
+            row = c.execute(
+                "SELECT * FROM schedules WHERE id=?",
+                (schedule_id,),
+            ).fetchone()
+            if row is None:
+                return None
+            run_id = str(uuid.uuid4())
+            c.execute(
+                "INSERT INTO dag_runs(id, dag_fingerprint, state, started_at, trigger, params_json) "
+                "VALUES (?,?,?,?,?,?)",
+                (
+                    run_id,
+                    row["dag_fingerprint"],
+                    DagRunState.PENDING.value,
+                    now,
+                    f"schedule:{schedule_id}:manual",
+                    row["params_json"],
+                ),
+            )
+            c.execute(
+                "UPDATE schedules SET last_run_at=?, last_run_id=? WHERE id=?",
+                (now, run_id, schedule_id),
+            )
+            return run_id
+
+    def dispatch_due_schedules(
+        self, *, limit: int = 10, now: float | None = None
+    ) -> list[dict[str, Any]]:
+        now = now or time.time()
+        dispatched: list[dict[str, Any]] = []
+        with self._tx() as c:
+            rows = c.execute(
+                "SELECT * FROM schedules "
+                "WHERE state='active' AND next_run_at <= ? "
+                "ORDER BY next_run_at ASC LIMIT ?",
+                (now, limit),
+            ).fetchall()
+            for row in rows:
+                active_run_ids = [
+                    r["id"]
+                    for r in c.execute(
+                        "SELECT id FROM dag_runs "
+                        "WHERE trigger LIKE ? AND state IN (?,?)",
+                        (
+                            f"schedule:{row['id']}%",
+                            DagRunState.PENDING.value,
+                            DagRunState.RUNNING.value,
+                        ),
+                    ).fetchall()
+                ]
+                if row["overlap_policy"] == "forbid" and active_run_ids:
+                    c.execute(
+                        "UPDATE schedules SET next_run_at=? WHERE id=?",
+                        (now + row["interval_seconds"], row["id"]),
+                    )
+                    continue
+                if row["overlap_policy"] == "replace" and active_run_ids:
+                    c.execute(
+                        "UPDATE dag_runs SET state=?, finished_at=? "
+                        "WHERE id IN ({})".format(",".join("?" for _ in active_run_ids)),
+                        [DagRunState.CANCELLED.value, now, *active_run_ids],
+                    )
+                run_id = str(uuid.uuid4())
+                c.execute(
+                    "INSERT INTO dag_runs(id, dag_fingerprint, state, started_at, trigger, params_json) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (
+                        run_id,
+                        row["dag_fingerprint"],
+                        DagRunState.PENDING.value,
+                        now,
+                        f"schedule:{row['id']}",
+                        row["params_json"],
+                    ),
+                )
+                c.execute(
+                    "UPDATE schedules SET next_run_at=?, last_run_at=?, last_run_id=? WHERE id=?",
+                    (
+                        now + row["interval_seconds"],
+                        now,
+                        run_id,
+                        row["id"],
+                    ),
+                )
+                dispatched.append(
+                    {
+                        "schedule_id": row["id"],
+                        "dag_run_id": run_id,
+                    }
+                )
+        return dispatched
 
     # ---- queue side of the same store ---------------------------------------
 

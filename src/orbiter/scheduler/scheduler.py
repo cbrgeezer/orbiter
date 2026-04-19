@@ -54,6 +54,9 @@ class Scheduler:
         self, dag_run_id: str, *, timeout: float | None = None
     ) -> DagRunState:
         """Drive the DAG forward until it reaches a terminal state."""
+        row = self.store.dag_run(dag_run_id)
+        if row is not None and row["state"] == DagRunState.PENDING.value:
+            self.store.set_dag_state(dag_run_id, DagRunState.RUNNING)
         await self._dispatch_ready(dag_run_id)
         deadline = None if timeout is None else asyncio.get_event_loop().time() + timeout
         while True:
@@ -70,6 +73,11 @@ class Scheduler:
         self._stop.set()
 
     async def _dispatch_ready(self, dag_run_id: str) -> None:
+        dag_row = self.store.dag_run(dag_run_id)
+        if dag_row is None:
+            return
+        if dag_row["state"] == DagRunState.CANCELLED.value:
+            return
         rows = self.store.task_runs_for_dag_run(dag_run_id)
         # latest state per task_id
         latest: dict[str, dict[str, Any]] = {}

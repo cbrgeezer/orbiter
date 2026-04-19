@@ -5,7 +5,9 @@ import heapq
 import itertools
 import time
 from dataclasses import dataclass, field
-from typing import Protocol
+from typing import Any, Protocol
+
+from orbiter.storage.sqlite_store import StateStore
 
 
 @dataclass
@@ -92,3 +94,66 @@ class InMemoryQueue:
 
     def __len__(self) -> int:
         return len(self._heap)
+
+
+class StoreBackedQueue:
+    """Durable queue backed by the state store's `queue_items` table.
+
+    This queue works with both SQLite and PostgreSQL stores. Delivery is
+    polling based, which is slower than the in memory queue but durable
+    across processes and runtime restarts.
+    """
+
+    def __init__(
+        self,
+        store: StateStore,
+        *,
+        worker_id: str = "queue-worker",
+        lease_seconds: float = 30.0,
+        reclaim_each_get: bool = True,
+    ) -> None:
+        self.store = store
+        self.worker_id = worker_id
+        self.lease_seconds = lease_seconds
+        self.reclaim_each_get = reclaim_each_get
+
+    async def put(self, msg: QueueMessage, *, delay_seconds: float = 0.0) -> None:
+        self.store.enqueue(
+            msg.task_run_id,
+            available_at=time.time() + max(0.0, delay_seconds),
+        )
+
+    async def get(self, *, timeout: float | None = None) -> QueueMessage | None:
+        deadline = None if timeout is None else time.time() + timeout
+        while True:
+            if self.reclaim_each_get:
+                self.store.reclaim_expired_leases()
+            row = self.store.lease(self.worker_id, self.lease_seconds)
+            if row is not None:
+                return QueueMessage(
+                    task_run_id=row["task_run_id"],
+                    task_id=row["task_id"],
+                    dag_run_id=row["dag_run_id"],
+                    attempt=row["attempt"],
+                    idempotency_key=row["idempotency_key"],
+                    queue_id=int(row["queue_id"]),
+                )
+            if deadline is not None and time.time() >= deadline:
+                return None
+            sleep_for = 0.05
+            if deadline is not None:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    return None
+                sleep_for = min(sleep_for, remaining)
+            await asyncio.sleep(sleep_for)
+
+    async def ack(self, msg: QueueMessage) -> None:
+        self.store.ack(msg.queue_id)
+
+    async def nack(self, msg: QueueMessage, *, delay_seconds: float = 0.0) -> None:
+        self.store.ack(msg.queue_id)
+        self.store.enqueue(
+            msg.task_run_id,
+            available_at=time.time() + max(0.0, delay_seconds),
+        )

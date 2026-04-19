@@ -1,15 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import time
 import traceback
 import uuid
 from typing import Any
 
+from orbiter.core.context import TaskContext, build_task_logger
 from orbiter.core.dag import DAG
 from orbiter.core.exceptions import PermanentTaskError
-from orbiter.core.state import TaskState
+from orbiter.core.state import DagRunState, TaskState
 from orbiter.queue.queue import Queue, QueueMessage
 from orbiter.retry.backoff import compute_delay
 from orbiter.storage.sqlite_store import StateStore
@@ -61,11 +63,35 @@ class Worker:
             await self.queue.ack(msg)
             return
 
+        dag_run = self.store.dag_run(msg.dag_run_id)
+        if dag_run is not None and dag_run["state"] == DagRunState.CANCELLED.value:
+            self.store.set_task_state(
+                msg.task_run_id, TaskState.SKIPPED, error="dag run cancelled"
+            )
+            await self.queue.ack(msg)
+            return
+
         self.store.set_task_state(msg.task_run_id, TaskState.RUNNING)
+        task_params = self._load_params(dag_run)
+        context = TaskContext(
+            dag_run_id=msg.dag_run_id,
+            task_id=msg.task_id,
+            task_run_id=msg.task_run_id,
+            attempt=msg.attempt,
+            params=task_params,
+            store=self.store,
+            logger=build_task_logger(
+                log,
+                dag_run_id=msg.dag_run_id,
+                task_id=msg.task_id,
+                task_run_id=msg.task_run_id,
+                attempt=msg.attempt,
+            ),
+        )
         try:
             if self.fault:
                 self.fault.before_task(msg)
-            output = await self._invoke(task.fn, task.timeout_seconds)
+            output = await self._invoke(task.fn, task.timeout_seconds, context)
             if self.fault:
                 self.fault.after_task_before_ack(msg)
             self.store.set_task_state(
@@ -106,15 +132,68 @@ class Worker:
                 )
                 await self.queue.ack(msg)
 
-    async def _invoke(self, fn: Any, timeout: float | None) -> Any:
+    def _load_params(self, dag_run: dict[str, Any] | None) -> dict[str, Any]:
+        if dag_run is None:
+            return {}
+        raw = dag_run.get("params_json")
+        if not raw:
+            return {}
+        if isinstance(raw, str):
+            import json
+
+            loaded = json.loads(raw)
+            return loaded if isinstance(loaded, dict) else {}
+        return {}
+
+    async def _invoke(self, fn: Any, timeout: float | None, context: TaskContext) -> Any:
+        call = self._bind_call(fn, context)
         if asyncio.iscoroutinefunction(fn):
-            coro = fn()
+            coro = call()
         else:
             loop = asyncio.get_running_loop()
-            coro = loop.run_in_executor(None, fn)
+            coro = loop.run_in_executor(None, call)
         if timeout is not None:
             return await asyncio.wait_for(coro, timeout=timeout)
         return await coro
+
+    def _bind_call(self, fn: Any, context: TaskContext) -> Any:
+        sig = inspect.signature(fn)
+        if not sig.parameters:
+            return fn
+        kwargs: dict[str, Any] = {}
+        positional: list[Any] = []
+        for param in sig.parameters.values():
+            if param.kind in {
+                inspect.Parameter.VAR_POSITIONAL,
+                inspect.Parameter.VAR_KEYWORD,
+            }:
+                continue
+            if param.name == "context" or param.annotation is TaskContext:
+                if param.kind in {
+                    inspect.Parameter.POSITIONAL_ONLY,
+                    inspect.Parameter.POSITIONAL_OR_KEYWORD,
+                } and not kwargs:
+                    positional.append(context)
+                else:
+                    kwargs[param.name] = context
+                continue
+            if param.name == "params":
+                kwargs[param.name] = context.params
+                continue
+            if param.name in context.params:
+                kwargs[param.name] = context.params[param.name]
+                continue
+            if param.default is inspect._empty:
+                raise TypeError(
+                    f"task function {fn.__name__} expects unsupported parameter {param.name!r}"
+                )
+        if positional and kwargs:
+            return lambda: fn(*positional, **kwargs)
+        if positional:
+            return lambda: fn(*positional)
+        if kwargs:
+            return lambda: fn(**kwargs)
+        return fn
 
 
 class FaultInjector:
