@@ -174,7 +174,34 @@ This starts:
 2. an API service for control and inspection
 3. a scheduler service for dispatch and recurring schedules
 4. a worker service for task execution
-5. the built in operator console
+5. a Caddy reverse proxy in front of the API
+6. the built in operator console
+
+Container entrypoint
+
+The image now uses a role based entrypoint so the same container can run the
+API, scheduler, worker, or an all in one process.
+
+Set `ORBITER_ROLE` to one of:
+
+1. `api`
+2. `scheduler`
+3. `worker`
+4. `all`
+
+The entrypoint also reads:
+
+1. `ORBITER_DAG_FILE`
+2. `ORBITER_DAG_SYMBOL`
+3. `ORBITER_DB`
+4. `ORBITER_QUEUE_BACKEND`
+5. `ORBITER_HOST`
+6. `ORBITER_PORT`
+7. `ORBITER_CONCURRENCY`
+8. `ORBITER_POLL_INTERVAL`
+
+When `ORBITER_DB` points at PostgreSQL, the container waits for the database
+before starting the selected runtime role.
 
 Split runtime roles
 

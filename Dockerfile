@@ -9,9 +9,12 @@ COPY pyproject.toml README.md /app/
 COPY src /app/src
 COPY examples /app/examples
 COPY docs /app/docs
+COPY scripts /app/scripts
 
 RUN pip install --no-cache-dir .
+RUN chmod +x /app/scripts/entrypoint.sh
 
 EXPOSE 8000
 
-CMD ["orbiter", "serve-api", "examples/example_dag.py", "--host", "0.0.0.0", "--port", "8000", "--db", "postgresql://orbiter:orbiter@postgres:5432/orbiter", "--queue-backend", "store"]
+ENTRYPOINT ["/app/scripts/entrypoint.sh"]
+CMD []

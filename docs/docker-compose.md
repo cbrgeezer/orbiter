@@ -9,7 +9,8 @@ local deployment story.
 2. Orbiter API service
 3. Orbiter scheduler service
 4. Orbiter worker service
-5. the browser operator console served from the API process
+5. a Caddy reverse proxy in front of the API
+6. the browser operator console served from the API process
 
 ## Start the stack
 
@@ -46,8 +47,12 @@ The default compose bundle runs:
 3. `examples/example_dag.py` as the shared DAG definition
 4. split runtime roles instead of a single all in one process
 
-The current command is intentionally explicit in `docker-compose.yml` so the
-runtime story stays legible.
+The container image uses a role based entrypoint. `docker-compose.yml` selects
+the runtime by setting `ORBITER_ROLE` to `api`, `scheduler`, or `worker`.
+The same entrypoint can also run `all` for a single process deployment.
+
+When `ORBITER_DB` points at PostgreSQL, the entrypoint waits for the database
+before starting the selected role.
 
 ## What this bundle is for
 
@@ -60,9 +65,9 @@ It is designed for:
 
 It is not yet a full production packaging story. There is still no:
 
-1. reverse proxy
-2. authentication layer
-3. secrets management
-4. autoscaling story for workers
+1. automatic TLS termination in the bundled proxy
+2. secrets management
+3. autoscaling story for workers
+4. external object storage or audit retention story
 
 Those are next layer concerns, not omissions hidden behind marketing.

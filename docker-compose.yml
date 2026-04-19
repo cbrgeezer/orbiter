@@ -25,23 +25,10 @@ services:
       postgres:
         condition: service_healthy
     environment:
+      ORBITER_ROLE: api
+      ORBITER_DB: postgresql://orbiter:orbiter@postgres:5432/orbiter
+      ORBITER_QUEUE_BACKEND: store
       ORBITER_API_KEY: ${ORBITER_API_KEY:-orbiter-demo-key}
-    ports:
-      - "8000:8000"
-    command:
-      [
-        "orbiter",
-        "serve-api",
-        "examples/example_dag.py",
-        "--host",
-        "0.0.0.0",
-        "--port",
-        "8000",
-        "--db",
-        "postgresql://orbiter:orbiter@postgres:5432/orbiter",
-        "--queue-backend",
-        "store"
-      ]
 
   scheduler:
     build:
@@ -51,18 +38,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command:
-      [
-        "orbiter",
-        "run-scheduler",
-        "examples/example_dag.py",
-        "--db",
-        "postgresql://orbiter:orbiter@postgres:5432/orbiter",
-        "--queue-backend",
-        "store",
-        "--poll-interval",
-        "0.5"
-      ]
+    environment:
+      ORBITER_ROLE: scheduler
+      ORBITER_DB: postgresql://orbiter:orbiter@postgres:5432/orbiter
+      ORBITER_QUEUE_BACKEND: store
+      ORBITER_POLL_INTERVAL: 0.5
 
   worker:
     build:
@@ -72,18 +52,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command:
-      [
-        "orbiter",
-        "run-worker",
-        "examples/example_dag.py",
-        "--db",
-        "postgresql://orbiter:orbiter@postgres:5432/orbiter",
-        "--queue-backend",
-        "store",
-        "--concurrency",
-        "4"
-      ]
+    environment:
+      ORBITER_ROLE: worker
+      ORBITER_DB: postgresql://orbiter:orbiter@postgres:5432/orbiter
+      ORBITER_QUEUE_BACKEND: store
+      ORBITER_CONCURRENCY: 4
+
+  proxy:
+    image: caddy:2
+    container_name: orbiter-proxy
+    depends_on:
+      api:
+        condition: service_started
+    ports:
+      - "8000:80"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
 
 volumes:
   postgres_data:
