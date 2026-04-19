@@ -1,0 +1,47 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: orbiter-postgres
+    environment:
+      POSTGRES_DB: orbiter
+      POSTGRES_USER: orbiter
+      POSTGRES_PASSWORD: orbiter
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orbiter -d orbiter"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  orbiter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orbiter-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ORBITER_DB: postgresql://orbiter:orbiter@postgres:5432/orbiter
+    ports:
+      - "8000:8000"
+    command:
+      [
+        "orbiter",
+        "serve",
+        "examples/example_dag.py",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--db",
+        "postgresql://orbiter:orbiter@postgres:5432/orbiter",
+        "--queue-backend",
+        "store"
+      ]
+
+volumes:
+  postgres_data:

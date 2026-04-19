@@ -69,6 +69,21 @@ Run it locally:
 orbiter run examples/example_dag.py --params '{"rows": 64}'
 ```
 
+Operator console
+
+When the API is running, open:
+
+```text
+http://localhost:8000/ui/
+```
+
+The console provides:
+
+1. runtime metrics summary
+2. run inspection and cancellation
+3. schedule creation, pause, resume, and run-now controls
+4. a lightweight operator view without a separate front end build step
+
 Recurring schedules
 
 ```bash
@@ -106,6 +121,24 @@ orbiter run examples/example_dag.py \
 
 See [`docs/postgres.md`](docs/postgres.md) for the PostgreSQL backend notes.
 See [`docs/queue-backends.md`](docs/queue-backends.md) for queue mode selection.
+
+Docker Compose quick start
+
+```bash
+docker compose up --build
+```
+
+Then open:
+
+```text
+http://localhost:8000/ui/
+```
+
+This starts:
+
+1. PostgreSQL 16
+2. Orbiter API
+3. the built in operator console
 
 Positioning
 

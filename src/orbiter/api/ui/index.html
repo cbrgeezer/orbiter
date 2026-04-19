@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Orbiter Console</title>
+    <link rel="stylesheet" href="/ui/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <div>
+          <p class="eyebrow">Orbiter Operator Console</p>
+          <h1>Workflow control without platform theatre.</h1>
+          <p class="lede">
+            Inspect runs, manage schedules, trigger jobs, and keep an eye on
+            runtime state from one lightweight console.
+          </p>
+        </div>
+        <div class="hero-actions">
+          <button id="refreshButton" class="primary">Refresh</button>
+        </div>
+      </header>
+
+      <section class="metrics-grid" id="metricsGrid"></section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Schedules</p>
+            <h2>Recurring control plane</h2>
+          </div>
+        </div>
+
+        <form id="scheduleForm" class="schedule-form">
+          <div class="field">
+            <label for="scheduleName">Name</label>
+            <input id="scheduleName" name="scheduleName" placeholder="hourly-import" required />
+          </div>
+          <div class="field">
+            <label for="scheduleInterval">Interval seconds</label>
+            <input id="scheduleInterval" name="scheduleInterval" type="number" min="1" value="3600" required />
+          </div>
+          <div class="field">
+            <label for="scheduleOverlap">Overlap policy</label>
+            <select id="scheduleOverlap" name="scheduleOverlap">
+              <option value="allow">allow</option>
+              <option value="forbid" selected>forbid</option>
+              <option value="replace">replace</option>
+            </select>
+          </div>
+          <div class="field field-wide">
+            <label for="scheduleParams">Params JSON</label>
+            <textarea id="scheduleParams" name="scheduleParams" rows="3">{}</textarea>
+          </div>
+          <div class="field-actions">
+            <button type="submit" class="primary">Create schedule</button>
+          </div>
+        </form>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>State</th>
+                <th>Overlap</th>
+                <th>Interval</th>
+                <th>Next run</th>
+                <th>Last run</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="schedulesTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Runs</p>
+            <h2>Execution stream</h2>
+          </div>
+          <button id="submitRunButton" class="secondary">Submit run</button>
+        </div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Run ID</th>
+                <th>State</th>
+                <th>Trigger</th>
+                <th>Started</th>
+                <th>Finished</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="runsTable"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Run detail</p>
+            <h2>Latest selected run</h2>
+          </div>
+        </div>
+        <pre id="runDetail" class="detail-pane">Select a run to inspect its tasks.</pre>
+      </section>
+    </div>
+
+    <script src="/ui/app.js" type="module"></script>
+  </body>
+</html>

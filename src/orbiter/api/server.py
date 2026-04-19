@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from orbiter.core.dag import DAG
@@ -72,6 +75,7 @@ def build_app(
     to make the surface obvious.
     """
     app = FastAPI(title="Orbiter", version="0.1.0")
+    ui_dir = Path(__file__).with_name("ui")
     store = create_state_store(db_path)
     queue = create_queue(store, backend=queue_backend, db_target=db_path)
     scheduler = Scheduler(dag, queue, store)
@@ -92,6 +96,10 @@ def build_app(
     @app.get("/healthz")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/", include_in_schema=False)
+    async def root() -> RedirectResponse:
+        return RedirectResponse(url="/ui/")
 
     @app.get("/metrics", response_model=None)
     async def metrics() -> str:
@@ -181,5 +189,7 @@ def build_app(
 
         asyncio.create_task(scheduler.run_until_complete(run_id, timeout=600))
         return {"schedule_id": schedule_id, "dag_run_id": run_id}
+
+    app.mount("/ui", StaticFiles(directory=ui_dir, html=True), name="ui")
 
     return app
