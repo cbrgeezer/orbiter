@@ -6,8 +6,10 @@ local deployment story.
 ## What it starts
 
 1. PostgreSQL 16
-2. Orbiter API server
-3. the browser operator console served from the same FastAPI process
+2. Orbiter API service
+3. Orbiter scheduler service
+4. Orbiter worker service
+5. the browser operator console served from the API process
 
 ## Start the stack
 
@@ -27,7 +29,8 @@ The default compose bundle runs:
 
 1. PostgreSQL as the state store
 2. the durable store backed queue
-3. `examples/example_dag.py` as the served DAG
+3. `examples/example_dag.py` as the shared DAG definition
+4. split runtime roles instead of a single all in one process
 
 The current command is intentionally explicit in `docker-compose.yml` so the
 runtime story stays legible.
@@ -46,6 +49,6 @@ It is not yet a full production packaging story. There is still no:
 1. reverse proxy
 2. authentication layer
 3. secrets management
-4. horizontal process split between API, scheduler, and workers
+4. autoscaling story for workers
 
 Those are next layer concerns, not omissions hidden behind marketing.

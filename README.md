@@ -137,8 +137,29 @@ http://localhost:8000/ui/
 This starts:
 
 1. PostgreSQL 16
-2. Orbiter API
-3. the built in operator console
+2. an API service for control and inspection
+3. a scheduler service for dispatch and recurring schedules
+4. a worker service for task execution
+5. the built in operator console
+
+Split runtime roles
+
+Run the services separately when you want a more production shaped setup:
+
+```bash
+orbiter serve-api examples/example_dag.py \
+  --db 'postgresql://orbiter:orbiter@localhost:5432/orbiter' \
+  --queue-backend store
+
+orbiter run-scheduler examples/example_dag.py \
+  --db 'postgresql://orbiter:orbiter@localhost:5432/orbiter' \
+  --queue-backend store
+
+orbiter run-worker examples/example_dag.py \
+  --db 'postgresql://orbiter:orbiter@localhost:5432/orbiter' \
+  --queue-backend store \
+  --concurrency 4
+```
 
 Positioning
 

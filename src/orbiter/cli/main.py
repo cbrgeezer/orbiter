@@ -16,6 +16,7 @@ from orbiter.core.validation import validation_warnings
 from orbiter.executor.executor import Executor
 from orbiter.queue.factory import create_queue
 from orbiter.scheduler.scheduler import Scheduler
+from orbiter.scheduler.service import ScheduleService
 from orbiter.storage.factory import create_state_store
 
 
@@ -138,6 +139,15 @@ async def _run(
         store.close()
 
 
+async def _wait_until_cancelled(label: str) -> None:
+    console.print(f"[green]{label} started[/green]. Press Ctrl+C to stop.")
+    stop = asyncio.Event()
+    try:
+        await stop.wait()
+    except (asyncio.CancelledError, KeyboardInterrupt):
+        return
+
+
 @app.command()
 def serve(
     file: Path = typer.Argument(...),
@@ -155,10 +165,125 @@ def serve(
 
     dag = _load_dag(file, symbol)
     uvicorn.run(
-        build_app(dag, db_path=db, concurrency=concurrency, queue_backend=queue_backend),
+        build_app(
+            dag,
+            db_path=db,
+            concurrency=concurrency,
+            queue_backend=queue_backend,
+            enable_workers=True,
+            enable_scheduler_service=True,
+            auto_drive_submissions=True,
+        ),
         host=host,
         port=port,
     )
+
+
+@app.command()
+def serve_api(
+    file: Path = typer.Argument(...),
+    symbol: str = typer.Option("dag"),
+    host: str = typer.Option("127.0.0.1"),
+    port: int = typer.Option(8000),
+    db: str = typer.Option(":memory:"),
+    queue_backend: str = typer.Option("auto", help="Queue backend: auto, memory, or store"),
+) -> None:
+    """Serve the API without local scheduler or workers."""
+    import uvicorn
+
+    from orbiter.api.server import build_app
+
+    dag = _load_dag(file, symbol)
+    uvicorn.run(
+        build_app(
+            dag,
+            db_path=db,
+            concurrency=0,
+            queue_backend=queue_backend,
+            enable_workers=False,
+            enable_scheduler_service=False,
+            auto_drive_submissions=False,
+        ),
+        host=host,
+        port=port,
+    )
+
+
+@app.command()
+def run_scheduler(
+    file: Path = typer.Argument(...),
+    symbol: str = typer.Option("dag"),
+    db: str = typer.Option(":memory:"),
+    queue_backend: str = typer.Option("auto", help="Queue backend: auto, memory, or store"),
+    poll_interval: float = typer.Option(1.0, help="Scheduler service poll interval"),
+) -> None:
+    """Run the scheduler service only."""
+    dag = _load_dag(file, symbol)
+    asyncio.run(
+        _run_scheduler_service(
+            dag,
+            db=db,
+            queue_backend=queue_backend,
+            poll_interval=poll_interval,
+        )
+    )
+
+
+async def _run_scheduler_service(
+    dag: DAG,
+    *,
+    db: str,
+    queue_backend: str,
+    poll_interval: float,
+) -> None:
+    store = create_state_store(db)
+    queue = create_queue(store, backend=queue_backend, db_target=db)
+    scheduler = Scheduler(dag, queue, store)
+    service = ScheduleService(scheduler, store, poll_interval=poll_interval)
+    try:
+        await service.start()
+        await _wait_until_cancelled("Scheduler service")
+    finally:
+        await service.stop()
+        store.close()
+
+
+@app.command()
+def run_worker(
+    file: Path = typer.Argument(...),
+    symbol: str = typer.Option("dag"),
+    db: str = typer.Option(":memory:"),
+    queue_backend: str = typer.Option("auto", help="Queue backend: auto, memory, or store"),
+    concurrency: int = typer.Option(4, help="Worker pool size"),
+) -> None:
+    """Run the worker pool only."""
+    dag = _load_dag(file, symbol)
+    asyncio.run(
+        _run_worker_service(
+            dag,
+            db=db,
+            queue_backend=queue_backend,
+            concurrency=concurrency,
+        )
+    )
+
+
+async def _run_worker_service(
+    dag: DAG,
+    *,
+    db: str,
+    queue_backend: str,
+    concurrency: int,
+) -> None:
+    store = create_state_store(db)
+    queue = create_queue(store, backend=queue_backend, db_target=db)
+    executor = Executor(dag, queue, store, concurrency=concurrency)
+    try:
+        await executor.start()
+        await _wait_until_cancelled("Worker service")
+    finally:
+        await executor.stop()
+        store.close()
 
 
 @app.command()

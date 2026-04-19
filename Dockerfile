@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir .
 
 EXPOSE 8000
 
-CMD ["orbiter", "serve", "examples/example_dag.py", "--host", "0.0.0.0", "--port", "8000", "--db", "postgresql://orbiter:orbiter@postgres:5432/orbiter", "--queue-backend", "store"]
+CMD ["orbiter", "serve-api", "examples/example_dag.py", "--host", "0.0.0.0", "--port", "8000", "--db", "postgresql://orbiter:orbiter@postgres:5432/orbiter", "--queue-backend", "store"]

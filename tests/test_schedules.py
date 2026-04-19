@@ -56,6 +56,39 @@ async def test_due_schedule_dispatches_run_and_updates_schedule():
         store.close()
 
 
+@pytest.mark.asyncio
+async def test_scheduler_service_drives_manual_pending_runs():
+    dag = DAG("manual-service")
+    seen = {"calls": 0}
+
+    @dag.task()
+    async def task():
+        seen["calls"] += 1
+        return "ok"
+
+    dag.finalize()
+
+    store = SQLiteStateStore(":memory:")
+    store.register_dag(dag.fingerprint(), dag.name, dag.to_dict())
+    run_id = store.create_dag_run(dag.fingerprint(), {"source": "manual"})
+    queue = InMemoryQueue()
+    scheduler = Scheduler(dag, queue, store, poll_interval=0.02)
+    executor = Executor(dag, queue, store, concurrency=1)
+    service = ScheduleService(scheduler, store, poll_interval=0.02, run_timeout=5)
+
+    await executor.start()
+    await service.start()
+    try:
+        await asyncio.sleep(0.15)
+        final = scheduler._terminal_state(run_id)
+        assert final == DagRunState.SUCCEEDED
+        assert seen["calls"] == 1
+    finally:
+        await service.stop()
+        await executor.stop()
+        store.close()
+
+
 def test_schedule_pause_resume_and_manual_trigger():
     store = SQLiteStateStore(":memory:")
     try:

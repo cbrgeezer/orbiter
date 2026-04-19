@@ -47,6 +47,7 @@ class StateStore(Protocol):
     def task_run(self, task_run_id: str) -> dict[str, Any] | None: ...
     def dag_run(self, dag_run_id: str) -> dict[str, Any] | None: ...
     def list_dag_runs(self, *, limit: int = 50) -> list[dict[str, Any]]: ...
+    def list_active_dag_runs(self, *, limit: int = 200) -> list[dict[str, Any]]: ...
     def cancel_dag_run(self, dag_run_id: str) -> bool: ...
     def state_counts(self) -> dict[str, int]: ...
     def create_schedule(
@@ -277,6 +278,13 @@ class SQLiteStateStore:
         rows = self._conn.execute(
             "SELECT * FROM dag_runs ORDER BY started_at DESC LIMIT ?",
             (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_active_dag_runs(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        rows = self._conn.execute(
+            "SELECT * FROM dag_runs WHERE state IN (?, ?) ORDER BY started_at ASC LIMIT ?",
+            (DagRunState.PENDING.value, DagRunState.RUNNING.value, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 

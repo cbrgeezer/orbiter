@@ -200,6 +200,14 @@ class PostgresStateStore:
             )
             return cur.fetchall()
 
+    def list_active_dag_runs(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM dag_runs WHERE state IN (%s, %s) ORDER BY started_at ASC LIMIT %s",
+                (DagRunState.PENDING.value, DagRunState.RUNNING.value, limit),
+            )
+            return cur.fetchall()
+
     def cancel_dag_run(self, dag_run_id: str) -> bool:
         with self._conn.transaction(), self._conn.cursor() as cur:
             cur.execute(

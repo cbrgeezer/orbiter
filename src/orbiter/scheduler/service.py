@@ -11,7 +11,7 @@ log = logging.getLogger("orbiter.schedule_service")
 
 
 class ScheduleService:
-    """Background loop that turns active schedules into DAG runs."""
+    """Background loop that drives schedules and active DAG runs."""
 
     def __init__(
         self,
@@ -45,10 +45,9 @@ class ScheduleService:
             due_runs = self.store.dispatch_due_schedules(limit=self.batch_size)
             for item in due_runs:
                 run_id = item["dag_run_id"]
-                log.info("dispatching scheduled dag run %s for schedule %s", run_id, item["schedule_id"])
-                asyncio.create_task(
-                    self.scheduler.run_until_complete(run_id, timeout=self.run_timeout)
-                )
+                log.info("registered scheduled dag run %s for schedule %s", run_id, item["schedule_id"])
+            for row in self.store.list_active_dag_runs(limit=self.batch_size * 20):
+                await self.scheduler._dispatch_ready(row["id"])
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=self.poll_interval)
             except asyncio.TimeoutError:

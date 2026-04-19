@@ -67,6 +67,9 @@ def build_app(
     db_path: str = ":memory:",
     concurrency: int = 4,
     queue_backend: QueueBackend = "auto",
+    enable_workers: bool = True,
+    enable_scheduler_service: bool = True,
+    auto_drive_submissions: bool = True,
 ) -> FastAPI:
     """Build a FastAPI app serving a single DAG.
 
@@ -84,13 +87,17 @@ def build_app(
 
     @app.on_event("startup")
     async def _startup() -> None:
-        await executor.start()
-        await schedule_service.start()
+        if enable_workers:
+            await executor.start()
+        if enable_scheduler_service:
+            await schedule_service.start()
 
     @app.on_event("shutdown")
     async def _shutdown() -> None:
-        await schedule_service.stop()
-        await executor.stop()
+        if enable_scheduler_service:
+            await schedule_service.stop()
+        if enable_workers:
+            await executor.stop()
         store.close()
 
     @app.get("/healthz")
@@ -116,10 +123,11 @@ def build_app(
     @app.post("/runs")
     async def submit(req: SubmitRequest) -> dict[str, Any]:
         run_id = await scheduler.submit(req.params or {})
-        # Fire-and-forget drive. In production this is a background worker loop.
-        import asyncio
+        if auto_drive_submissions:
+            # Fire-and-forget drive. In production this belongs to a scheduler process.
+            import asyncio
 
-        asyncio.create_task(scheduler.run_until_complete(run_id, timeout=600))
+            asyncio.create_task(scheduler.run_until_complete(run_id, timeout=600))
         return {"dag_run_id": run_id}
 
     @app.get("/runs/{run_id}")
@@ -185,9 +193,10 @@ def build_app(
         run_id = store.trigger_schedule_now(schedule_id)
         if run_id is None:
             raise HTTPException(404, "schedule not found")
-        import asyncio
+        if auto_drive_submissions:
+            import asyncio
 
-        asyncio.create_task(scheduler.run_until_complete(run_id, timeout=600))
+            asyncio.create_task(scheduler.run_until_complete(run_id, timeout=600))
         return {"schedule_id": schedule_id, "dag_run_id": run_id}
 
     app.mount("/ui", StaticFiles(directory=ui_dir, html=True), name="ui")
