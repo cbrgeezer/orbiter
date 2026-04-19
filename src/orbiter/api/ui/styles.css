@@ -114,6 +114,10 @@ body {
   margin-bottom: 24px;
 }
 
+.auth-panel {
+  border-style: dashed;
+}
+
 .panel-header {
   display: flex;
   justify-content: space-between;
@@ -127,6 +131,12 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   margin-bottom: 22px;
+}
+
+.auth-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 16px;
 }
 
 .field,
@@ -288,6 +298,10 @@ th {
   }
 
   .schedule-form {
+    grid-template-columns: 1fr;
+  }
+
+  .auth-form {
     grid-template-columns: 1fr;
   }
 

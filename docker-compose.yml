@@ -24,6 +24,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    environment:
+      ORBITER_API_KEY: ${ORBITER_API_KEY:-orbiter-demo-key}
     ports:
       - "8000:8000"
     command:

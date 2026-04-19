@@ -5,10 +5,24 @@ const runDetail = document.querySelector("#runDetail");
 const refreshButton = document.querySelector("#refreshButton");
 const submitRunButton = document.querySelector("#submitRunButton");
 const scheduleForm = document.querySelector("#scheduleForm");
+const authPanel = document.querySelector("#authPanel");
+const authForm = document.querySelector("#authForm");
+const apiKeyInput = document.querySelector("#apiKeyInput");
+
+const API_KEY_STORAGE = "orbiter.console.apiKey";
+let authEnabled = false;
 
 async function fetchJson(url, options = {}) {
+  const apiKey = window.localStorage.getItem(API_KEY_STORAGE);
+  const headers = {
+    "Content-Type": "application/json",
+    ...(options.headers || {}),
+  };
+  if (apiKey) {
+    headers["X-Orbiter-Key"] = apiKey;
+  }
   const response = await fetch(url, {
-    headers: { "Content-Type": "application/json" },
+    headers,
     ...options,
   });
   if (!response.ok) {
@@ -19,9 +33,23 @@ async function fetchJson(url, options = {}) {
 }
 
 async function fetchMetrics() {
-  const response = await fetch("/metrics");
+  const apiKey = window.localStorage.getItem(API_KEY_STORAGE);
+  const response = await fetch("/metrics", {
+    headers: apiKey ? { "X-Orbiter-Key": apiKey } : {},
+  });
   const text = await response.text();
+  if (!response.ok) {
+    throw new Error(text || `Request failed: ${response.status}`);
+  }
   return parseMetrics(text);
+}
+
+async function loadAuthConfig() {
+  const response = await fetch("/auth/config");
+  const data = await response.json();
+  authEnabled = Boolean(data.enabled);
+  authPanel.hidden = !authEnabled;
+  return data;
 }
 
 function parseMetrics(text) {
@@ -121,6 +149,7 @@ async function loadRunDetail(runId) {
 }
 
 async function refresh() {
+  await loadAuthConfig();
   const [metrics, runsData, schedulesData] = await Promise.all([
     fetchMetrics(),
     fetchJson("/runs?limit=50"),
@@ -165,6 +194,16 @@ document.body.addEventListener("click", async (event) => {
 });
 
 refreshButton.addEventListener("click", refresh);
+
+authForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const key = apiKeyInput.value.trim();
+  if (!key) {
+    return;
+  }
+  window.localStorage.setItem(API_KEY_STORAGE, key);
+  await refresh();
+});
 
 submitRunButton.addEventListener("click", async () => {
   await fetchJson("/runs", {

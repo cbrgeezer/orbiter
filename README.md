@@ -84,6 +84,27 @@ The console provides:
 3. schedule creation, pause, resume, and run-now controls
 4. a lightweight operator view without a separate front end build step
 
+API key auth
+
+Set `ORBITER_API_KEY` to protect the API and operator console.
+
+```bash
+export ORBITER_API_KEY='replace-this-with-a-strong-key'
+orbiter serve-api examples/example_dag.py --db orbiter.db
+```
+
+Public routes remain limited to:
+
+1. `/`
+2. `/healthz`
+3. `/auth/config`
+4. `/ui/*`
+
+Operational API routes require the key through:
+
+1. `X-Orbiter-Key`
+2. `Authorization: Bearer <key>`
+
 Recurring schedules
 
 ```bash
@@ -132,6 +153,19 @@ Then open:
 
 ```text
 http://localhost:8000/ui/
+```
+
+The compose bundle enables API key auth by default with:
+
+```text
+orbiter-demo-key
+```
+
+Override it in your shell before startup:
+
+```bash
+export ORBITER_API_KEY='replace-this-in-real-use'
+docker compose up --build
 ```
 
 This starts:

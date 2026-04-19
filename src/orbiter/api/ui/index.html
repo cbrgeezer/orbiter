@@ -22,6 +22,24 @@
         </div>
       </header>
 
+      <section class="panel auth-panel" id="authPanel" hidden>
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Authentication</p>
+            <h2>Unlock the operator surface</h2>
+          </div>
+        </div>
+        <form id="authForm" class="auth-form">
+          <div class="field field-wide">
+            <label for="apiKeyInput">API key</label>
+            <input id="apiKeyInput" type="password" autocomplete="current-password" placeholder="Enter the Orbiter API key" />
+          </div>
+          <div class="field-actions">
+            <button type="submit" class="primary">Store key</button>
+          </div>
+        </form>
+      </section>
+
       <section class="metrics-grid" id="metricsGrid"></section>
 
       <section class="panel">

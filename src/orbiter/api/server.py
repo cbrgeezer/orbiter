@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import RedirectResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from orbiter.api.auth import AuthConfig, is_authorised
 from orbiter.core.dag import DAG
 from orbiter.executor.executor import Executor
 from orbiter.queue.factory import QueueBackend, create_queue
@@ -70,6 +72,7 @@ def build_app(
     enable_workers: bool = True,
     enable_scheduler_service: bool = True,
     auto_drive_submissions: bool = True,
+    api_key: str | None = None,
 ) -> FastAPI:
     """Build a FastAPI app serving a single DAG.
 
@@ -79,6 +82,7 @@ def build_app(
     """
     app = FastAPI(title="Orbiter", version="0.1.0")
     ui_dir = Path(__file__).with_name("ui")
+    auth = AuthConfig(api_key=api_key or os.getenv("ORBITER_API_KEY"))
     store = create_state_store(db_path)
     queue = create_queue(store, backend=queue_backend, db_target=db_path)
     scheduler = Scheduler(dag, queue, store)
@@ -108,9 +112,23 @@ def build_app(
     async def root() -> RedirectResponse:
         return RedirectResponse(url="/ui/")
 
+    @app.middleware("http")
+    async def require_api_key(request: Request, call_next):  # type: ignore[no-untyped-def]
+        if not is_authorised(auth, request.headers, request.url.path):
+            return JSONResponse(
+                status_code=401,
+                content={"detail": "unauthorised"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        return await call_next(request)
+
     @app.get("/metrics", response_model=None)
     async def metrics() -> str:
         return _prometheus_metrics(store)
+
+    @app.get("/auth/config")
+    async def auth_config() -> dict[str, bool]:
+        return {"enabled": auth.enabled}
 
     @app.get("/dag")
     async def get_dag() -> dict[str, Any]:

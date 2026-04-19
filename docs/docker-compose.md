@@ -23,6 +23,20 @@ Once the stack is healthy, open:
 http://localhost:8000/ui/
 ```
 
+The default compose bundle enables API key auth on the API service with the
+value:
+
+```text
+orbiter-demo-key
+```
+
+Override it before startup:
+
+```bash
+export ORBITER_API_KEY='replace-this-in-real-use'
+docker compose up --build
+```
+
 ## Runtime configuration
 
 The default compose bundle runs:
