@@ -290,6 +290,11 @@ th {
   overflow: auto;
 }
 
+code {
+  font-family: "IBM Plex Mono", "SFMono-Regular", monospace;
+  font-size: 0.85rem;
+}
+
 @media (max-width: 980px) {
   .hero,
   .panel-header {

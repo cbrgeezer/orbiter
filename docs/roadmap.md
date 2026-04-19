@@ -12,8 +12,7 @@
   Tuesday's run" is not supported.
 - **No DAG versioning UX.** The fingerprint changes on any definition edit;
   there is no concept of a compatible migration.
-- **Web UI is a placeholder.** The API now exposes `/healthz`, `/dag`, `/runs`, run cancellation, and `/metrics`, but there is still no browser based operator console.
-- **No authentication on the API.** Intended behind a reverse proxy.
+- **No full secrets story.** API key auth exists, but there is no built in secret rotation, vault integration, or parameter decryption layer.
 - **No distributed tracing.** Structured logs only.
 
 ## Near-term
@@ -29,6 +28,9 @@
 - [x] Task context carrying run metadata, params, checkpoints, and logger bindings.
 - [x] Basic run control: list runs, inspect runs, and cancel active runs.
 - [x] Lightweight Prometheus style metrics endpoint.
+- [x] Browser based operator console for runs, schedules, and activity.
+- [x] API key auth for the operator surface.
+- [x] Persisted operator and scheduler activity feed.
 - [ ] `task.resources` hint for the worker pool so CPU-bound tasks can pin
       to a subset of workers.
 
@@ -39,7 +41,7 @@
 - [ ] Pluggable secrets provider for task params.
 - [ ] OpenTelemetry spans around every state transition.
 - [ ] Structured per-task logs streamed into the state store.
-- [ ] Browser based operator console for runs and schedules.
+- [ ] Audit-grade retention and export story for operator activity.
 
 ## Out of scope, by choice
 

@@ -31,6 +31,37 @@ class ScheduleRequest(BaseModel):
     start_at: float | None = None
 
 
+def _activity_actor(request: Request) -> str:
+    forwarded = request.headers.get("x-forwarded-for")
+    remote = forwarded.split(",")[0].strip() if forwarded else None
+    if not remote and request.client is not None:
+        remote = request.client.host
+    return f"operator@{remote}" if remote else "operator"
+
+
+def _record_operator_activity(
+    store: StateStore,
+    request: Request,
+    event_type: str,
+    summary: str,
+    *,
+    dag_run_id: str | None = None,
+    schedule_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    store.record_activity(
+        event_type,
+        summary,
+        actor=_activity_actor(request),
+        dag_run_id=dag_run_id,
+        schedule_id=schedule_id,
+        metadata={
+            "path": request.url.path,
+            **(metadata or {}),
+        },
+    )
+
+
 def _prometheus_metrics(store: StateStore) -> str:
     lines = [
         "# HELP orbiter_dag_runs_total Total DAG runs by state",
@@ -130,6 +161,10 @@ def build_app(
     async def auth_config() -> dict[str, bool]:
         return {"enabled": auth.enabled}
 
+    @app.get("/activity")
+    async def activity(limit: int = 50) -> dict[str, Any]:
+        return {"events": store.list_activity(limit=max(1, min(limit, 200)))}
+
     @app.get("/dag")
     async def get_dag() -> dict[str, Any]:
         return dag.to_dict()
@@ -139,8 +174,16 @@ def build_app(
         return {"runs": store.list_dag_runs(limit=max(1, min(limit, 200)))}
 
     @app.post("/runs")
-    async def submit(req: SubmitRequest) -> dict[str, Any]:
+    async def submit(req: SubmitRequest, request: Request) -> dict[str, Any]:
         run_id = await scheduler.submit(req.params or {})
+        _record_operator_activity(
+            store,
+            request,
+            "run.submitted",
+            "Submitted a DAG run",
+            dag_run_id=run_id,
+            metadata={"trigger": "manual", "params": req.params or {}},
+        )
         if auto_drive_submissions:
             # Fire-and-forget drive. In production this belongs to a scheduler process.
             import asyncio
@@ -157,11 +200,19 @@ def build_app(
         return row
 
     @app.post("/runs/{run_id}/cancel")
-    async def cancel_run(run_id: str) -> dict[str, Any]:
+    async def cancel_run(run_id: str, request: Request) -> dict[str, Any]:
         if not store.cancel_dag_run(run_id):
             row = store.dag_run(run_id)
             if row is None:
                 raise HTTPException(404, "dag run not found")
+        else:
+            _record_operator_activity(
+                store,
+                request,
+                "run.cancelled",
+                f"Cancelled DAG run {run_id}",
+                dag_run_id=run_id,
+            )
         row = store.dag_run(run_id)
         assert row is not None
         return {"dag_run_id": run_id, "state": row["state"]}
@@ -171,7 +222,7 @@ def build_app(
         return {"schedules": store.list_schedules(limit=max(1, min(limit, 200)))}
 
     @app.post("/schedules")
-    async def create_schedule(req: ScheduleRequest) -> dict[str, Any]:
+    async def create_schedule(req: ScheduleRequest, request: Request) -> dict[str, Any]:
         if req.interval_seconds <= 0:
             raise HTTPException(400, "interval_seconds must be positive")
         if req.overlap_policy not in {"allow", "forbid", "replace"}:
@@ -184,33 +235,68 @@ def build_app(
             params=req.params or {},
             start_at=req.start_at,
         )
+        _record_operator_activity(
+            store,
+            request,
+            "schedule.created.operator",
+            f"Created schedule {req.name}",
+            schedule_id=schedule_id,
+            metadata={
+                "interval_seconds": req.interval_seconds,
+                "overlap_policy": req.overlap_policy,
+            },
+        )
         return {"schedule_id": schedule_id}
 
     @app.post("/schedules/{schedule_id}/pause")
-    async def pause_schedule(schedule_id: str) -> dict[str, Any]:
+    async def pause_schedule(schedule_id: str, request: Request) -> dict[str, Any]:
         if not store.pause_schedule(schedule_id):
             row = store.schedule(schedule_id)
             if row is None:
                 raise HTTPException(404, "schedule not found")
+        else:
+            _record_operator_activity(
+                store,
+                request,
+                "schedule.paused.operator",
+                f"Paused schedule {schedule_id}",
+                schedule_id=schedule_id,
+            )
         row = store.schedule(schedule_id)
         assert row is not None
         return {"schedule_id": schedule_id, "state": row["state"]}
 
     @app.post("/schedules/{schedule_id}/resume")
-    async def resume_schedule(schedule_id: str) -> dict[str, Any]:
+    async def resume_schedule(schedule_id: str, request: Request) -> dict[str, Any]:
         if not store.resume_schedule(schedule_id):
             row = store.schedule(schedule_id)
             if row is None:
                 raise HTTPException(404, "schedule not found")
+        else:
+            _record_operator_activity(
+                store,
+                request,
+                "schedule.resumed.operator",
+                f"Resumed schedule {schedule_id}",
+                schedule_id=schedule_id,
+            )
         row = store.schedule(schedule_id)
         assert row is not None
         return {"schedule_id": schedule_id, "state": row["state"]}
 
     @app.post("/schedules/{schedule_id}/run")
-    async def run_schedule_now(schedule_id: str) -> dict[str, Any]:
+    async def run_schedule_now(schedule_id: str, request: Request) -> dict[str, Any]:
         run_id = store.trigger_schedule_now(schedule_id)
         if run_id is None:
             raise HTTPException(404, "schedule not found")
+        _record_operator_activity(
+            store,
+            request,
+            "schedule.run_now.operator",
+            f"Triggered schedule {schedule_id} immediately",
+            dag_run_id=run_id,
+            schedule_id=schedule_id,
+        )
         if auto_drive_submissions:
             import asyncio
 

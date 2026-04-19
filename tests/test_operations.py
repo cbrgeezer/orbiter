@@ -72,3 +72,25 @@ def test_state_counts_include_dag_and_task_states():
         assert counts["task_runs_running"] == 1
     finally:
         store.close()
+
+
+def test_activity_log_keeps_latest_events_first():
+    store = SQLiteStateStore(":memory:")
+    try:
+        first_id = store.record_activity(
+            "run.submitted",
+            "Submitted a DAG run",
+            actor="operator@test",
+            metadata={"trigger": "manual"},
+        )
+        second_id = store.record_activity(
+            "schedule.created",
+            "Created schedule hourly-import",
+            actor="operator@test",
+            metadata={"interval_seconds": 3600},
+        )
+        events = store.list_activity(limit=10)
+        assert [event["id"] for event in events[:2]] == [second_id, first_id]
+        assert events[0]["metadata"]["interval_seconds"] == 3600
+    finally:
+        store.close()

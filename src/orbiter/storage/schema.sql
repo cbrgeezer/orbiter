@@ -76,3 +76,17 @@ CREATE TABLE IF NOT EXISTS schedules (
 );
 
 CREATE INDEX IF NOT EXISTS idx_schedules_state_next_run ON schedules(state, next_run_at);
+
+CREATE TABLE IF NOT EXISTS activity_events (
+    id           TEXT PRIMARY KEY,
+    event_type   TEXT NOT NULL,
+    summary      TEXT NOT NULL,
+    actor        TEXT NOT NULL,
+    dag_run_id   TEXT REFERENCES dag_runs(id),
+    schedule_id  TEXT REFERENCES schedules(id),
+    metadata_json TEXT,
+    created_at   REAL NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_events_created_at
+    ON activity_events(created_at DESC);

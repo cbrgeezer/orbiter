@@ -234,6 +234,42 @@ class PostgresStateStore:
                 counts[f"task_runs_{row['state']}"] = row["n"]
         return counts
 
+    def record_activity(
+        self,
+        event_type: str,
+        summary: str,
+        *,
+        actor: str = "system",
+        dag_run_id: str | None = None,
+        schedule_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        event_id = str(uuid.uuid4())
+        with self._conn.transaction(), self._conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO activity_events(id, event_type, summary, actor, dag_run_id, schedule_id, metadata_json, created_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                (
+                    event_id,
+                    event_type,
+                    summary,
+                    actor,
+                    dag_run_id,
+                    schedule_id,
+                    Jsonb(metadata or {}),
+                    time.time(),
+                ),
+            )
+        return event_id
+
+    def list_activity(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        with self._conn.cursor() as cur:
+            cur.execute(
+                "SELECT * FROM activity_events ORDER BY created_at DESC LIMIT %s",
+                (limit,),
+            )
+            return cur.fetchall()
+
     def create_schedule(
         self,
         dag_fingerprint: str,
@@ -263,6 +299,12 @@ class PostgresStateStore:
                     now,
                 ),
             )
+        self.record_activity(
+            "schedule.created",
+            f"Created schedule {name}",
+            schedule_id=schedule_id,
+            metadata={"interval_seconds": interval_seconds, "overlap_policy": overlap_policy},
+        )
         return schedule_id
 
     def list_schedules(self, *, limit: int = 100) -> list[dict[str, Any]]:
@@ -284,7 +326,14 @@ class PostgresStateStore:
                 "UPDATE schedules SET state='paused' WHERE id=%s AND state='active'",
                 (schedule_id,),
             )
-            return cur.rowcount > 0
+            changed = cur.rowcount > 0
+        if changed:
+            self.record_activity(
+                "schedule.paused",
+                f"Paused schedule {schedule_id}",
+                schedule_id=schedule_id,
+            )
+        return changed
 
     def resume_schedule(self, schedule_id: str) -> bool:
         with self._conn.transaction(), self._conn.cursor() as cur:
@@ -292,7 +341,14 @@ class PostgresStateStore:
                 "UPDATE schedules SET state='active' WHERE id=%s AND state='paused'",
                 (schedule_id,),
             )
-            return cur.rowcount > 0
+            changed = cur.rowcount > 0
+        if changed:
+            self.record_activity(
+                "schedule.resumed",
+                f"Resumed schedule {schedule_id}",
+                schedule_id=schedule_id,
+            )
+        return changed
 
     def trigger_schedule_now(self, schedule_id: str) -> str | None:
         now = time.time()
@@ -321,13 +377,20 @@ class PostgresStateStore:
                 "UPDATE schedules SET last_run_at=%s, last_run_id=%s WHERE id=%s",
                 (now, run_id, schedule_id),
             )
-            return run_id
+        self.record_activity(
+            "schedule.run_now",
+            f"Triggered schedule {schedule_id} for immediate execution",
+            dag_run_id=run_id,
+            schedule_id=schedule_id,
+        )
+        return run_id
 
     def dispatch_due_schedules(
         self, *, limit: int = 10, now: float | None = None
     ) -> list[dict[str, Any]]:
         now = now or time.time()
         dispatched: list[dict[str, Any]] = []
+        activity_events: list[dict[str, Any]] = []
         with self._conn.transaction(), self._conn.cursor() as cur:
             cur.execute(
                 "SELECT * FROM schedules "
@@ -382,6 +445,23 @@ class PostgresStateStore:
                     ),
                 )
                 dispatched.append({"schedule_id": row["id"], "dag_run_id": run_id})
+                activity_events.append(
+                    {
+                        "event_type": "schedule.dispatched",
+                        "summary": f"Dispatched scheduled run for {row['name']}",
+                        "dag_run_id": run_id,
+                        "schedule_id": row["id"],
+                        "metadata": {"trigger": f"schedule:{row['id']}"},
+                    }
+                )
+        for event in activity_events:
+            self.record_activity(
+                event["event_type"],
+                event["summary"],
+                dag_run_id=event["dag_run_id"],
+                schedule_id=event["schedule_id"],
+                metadata=event["metadata"],
+            )
         return dispatched
 
     def enqueue(self, task_run_id: str, *, available_at: float | None = None) -> None:

@@ -40,7 +40,7 @@ Current runtime capabilities
 
 1. Tasks can receive a `TaskContext` object for run metadata, params, checkpoints, and structured logging.
 2. CLI validation warns when tasks are missing timeouts.
-3. The API exposes run listing, run cancellation, recurring schedules, and a simple Prometheus style metrics endpoint.
+3. The API exposes run listing, run cancellation, recurring schedules, a persisted activity feed, and a simple Prometheus style metrics endpoint.
 4. The same runtime can use SQLite for local work or PostgreSQL for a more production shaped deployment.
 5. Queue mode can be chosen between low latency in memory execution and a durable store backed queue.
 
@@ -82,7 +82,8 @@ The console provides:
 1. runtime metrics summary
 2. run inspection and cancellation
 3. schedule creation, pause, resume, and run-now controls
-4. a lightweight operator view without a separate front end build step
+4. an activity feed for operator and scheduler actions
+5. a lightweight operator view without a separate front end build step
 
 API key auth
 

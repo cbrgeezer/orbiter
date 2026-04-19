@@ -2,6 +2,7 @@ const metricsGrid = document.querySelector("#metricsGrid");
 const runsTable = document.querySelector("#runsTable");
 const schedulesTable = document.querySelector("#schedulesTable");
 const runDetail = document.querySelector("#runDetail");
+const activityTable = document.querySelector("#activityTable");
 const refreshButton = document.querySelector("#refreshButton");
 const submitRunButton = document.querySelector("#submitRunButton");
 const scheduleForm = document.querySelector("#scheduleForm");
@@ -143,6 +144,21 @@ function renderSchedules(schedules) {
     .join("");
 }
 
+function renderActivity(events) {
+  activityTable.innerHTML = events
+    .map(
+      (event) => `
+        <tr>
+          <td>${formatTime(event.created_at)}</td>
+          <td><code>${event.event_type}</code></td>
+          <td>${event.actor}</td>
+          <td>${event.summary}</td>
+        </tr>
+      `
+    )
+    .join("");
+}
+
 async function loadRunDetail(runId) {
   const data = await fetchJson(`/runs/${runId}`);
   runDetail.textContent = JSON.stringify(data, null, 2);
@@ -150,14 +166,16 @@ async function loadRunDetail(runId) {
 
 async function refresh() {
   await loadAuthConfig();
-  const [metrics, runsData, schedulesData] = await Promise.all([
+  const [activityData, metricsData, runsPayload, schedulesPayload] = await Promise.all([
+    fetchJson("/activity?limit=20"),
     fetchMetrics(),
     fetchJson("/runs?limit=50"),
     fetchJson("/schedules?limit=50"),
   ]);
-  renderMetrics(metrics);
-  renderRuns(runsData.runs);
-  renderSchedules(schedulesData.schedules);
+  renderActivity(activityData.events);
+  renderMetrics(metricsData);
+  renderRuns(runsPayload.runs);
+  renderSchedules(schedulesPayload.schedules);
 }
 
 document.body.addEventListener("click", async (event) => {
