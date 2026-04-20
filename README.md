@@ -84,6 +84,7 @@ The console provides:
 3. schedule creation, pause, resume, and run-now controls
 4. an activity feed for operator and scheduler actions
 5. a lightweight operator view without a separate front end build step
+6. API key entry stored for the current browser tab session rather than persisted across restarts
 
 API key auth
 
@@ -106,6 +107,9 @@ Operational API routes require the key through:
 1. `X-Orbiter-Key`
 2. `Authorization: Bearer <key>`
 
+The built in operator console stores the key in browser `sessionStorage`, so
+closing the tab clears it.
+
 Recurring schedules
 
 ```bash
@@ -121,6 +125,10 @@ orbiter pause-schedule orbiter.db <schedule_id>
 orbiter resume-schedule orbiter.db <schedule_id>
 orbiter run-schedule orbiter.db <schedule_id> examples/example_dag.py
 ```
+
+When the API is started for a DAG, it registers that DAG definition with the
+state store on startup. That means schedule creation through `POST /schedules`
+works even before the first manual run is submitted.
 
 See [`docs/scheduling.md`](docs/scheduling.md) for the schedule model and semantics.
 
