@@ -335,22 +335,22 @@ def create_schedule(
     store = create_state_store(db)
     try:
         store.register_dag(dag.fingerprint(), dag.name, dag.to_dict())
-    try:
-        parsed = json.loads(params)
-    except json.JSONDecodeError as exc:
-        raise typer.BadParameter(f"invalid JSON for --params: {exc}") from exc
-    if not isinstance(parsed, dict):
-        raise typer.BadParameter("--params must decode to a JSON object")
-    if overlap_policy not in {"allow", "forbid", "replace"}:
-        raise typer.BadParameter("--overlap-policy must be allow, forbid, or replace")
-    schedule_id = store.create_schedule(
-        dag.fingerprint(),
-        name,
-        every_seconds,
-        overlap_policy=overlap_policy,
-        params=parsed,
-        start_at=None if start_in_seconds <= 0 else time.time() + start_in_seconds,
-    )
+        try:
+            parsed = json.loads(params)
+        except json.JSONDecodeError as exc:
+            raise typer.BadParameter(f"invalid JSON for --params: {exc}") from exc
+        if not isinstance(parsed, dict):
+            raise typer.BadParameter("--params must decode to a JSON object")
+        if overlap_policy not in {"allow", "forbid", "replace"}:
+            raise typer.BadParameter("--overlap-policy must be allow, forbid, or replace")
+        schedule_id = store.create_schedule(
+            dag.fingerprint(),
+            name,
+            every_seconds,
+            overlap_policy=overlap_policy,
+            params=parsed,
+            start_at=None if start_in_seconds <= 0 else time.time() + start_in_seconds,
+        )
         console.print(f"[green]schedule created[/green] {schedule_id}")
     finally:
         store.close()

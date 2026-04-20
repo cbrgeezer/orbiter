@@ -13,8 +13,29 @@ const apiKeyInput = document.querySelector("#apiKeyInput");
 const API_KEY_STORAGE = "orbiter.console.apiKey";
 let authEnabled = false;
 
+function readApiKey() {
+  return window.sessionStorage.getItem(API_KEY_STORAGE);
+}
+
+function writeApiKey(value) {
+  if (!value) {
+    window.sessionStorage.removeItem(API_KEY_STORAGE);
+    return;
+  }
+  window.sessionStorage.setItem(API_KEY_STORAGE, value);
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
 async function fetchJson(url, options = {}) {
-  const apiKey = window.localStorage.getItem(API_KEY_STORAGE);
+  const apiKey = readApiKey();
   const headers = {
     "Content-Type": "application/json",
     ...(options.headers || {}),
@@ -34,7 +55,7 @@ async function fetchJson(url, options = {}) {
 }
 
 async function fetchMetrics() {
-  const apiKey = window.localStorage.getItem(API_KEY_STORAGE);
+  const apiKey = readApiKey();
   const response = await fetch("/metrics", {
     headers: apiKey ? { "X-Orbiter-Key": apiKey } : {},
   });
@@ -94,7 +115,8 @@ function formatTime(value) {
 }
 
 function badge(value) {
-  return `<span class="badge ${value}">${value}</span>`;
+  const safeValue = escapeHtml(value);
+  return `<span class="badge ${safeValue}">${safeValue}</span>`;
 }
 
 function renderRuns(runs) {
@@ -104,7 +126,7 @@ function renderRuns(runs) {
         <tr>
           <td><button class="secondary" data-run-detail="${run.id}">${run.id.slice(0, 8)}</button></td>
           <td>${badge(run.state)}</td>
-          <td>${run.trigger || "manual"}</td>
+          <td>${escapeHtml(run.trigger || "manual")}</td>
           <td>${formatTime(run.started_at)}</td>
           <td>${formatTime(run.finished_at)}</td>
           <td>
@@ -124,9 +146,9 @@ function renderSchedules(schedules) {
     .map(
       (schedule) => `
         <tr>
-          <td>${schedule.name}</td>
+          <td>${escapeHtml(schedule.name)}</td>
           <td>${badge(schedule.state)}</td>
-          <td>${schedule.overlap_policy}</td>
+          <td>${escapeHtml(schedule.overlap_policy)}</td>
           <td>${schedule.interval_seconds}s</td>
           <td>${formatTime(schedule.next_run_at)}</td>
           <td>${schedule.last_run_id ? schedule.last_run_id.slice(0, 8) : "—"}</td>
@@ -150,9 +172,9 @@ function renderActivity(events) {
       (event) => `
         <tr>
           <td>${formatTime(event.created_at)}</td>
-          <td><code>${event.event_type}</code></td>
-          <td>${event.actor}</td>
-          <td>${event.summary}</td>
+          <td><code>${escapeHtml(event.event_type)}</code></td>
+          <td>${escapeHtml(event.actor)}</td>
+          <td>${escapeHtml(event.summary)}</td>
         </tr>
       `
     )
@@ -219,7 +241,7 @@ authForm.addEventListener("submit", async (event) => {
   if (!key) {
     return;
   }
-  window.localStorage.setItem(API_KEY_STORAGE, key);
+  writeApiKey(key);
   await refresh();
 });
 

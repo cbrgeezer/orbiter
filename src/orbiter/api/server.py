@@ -115,6 +115,7 @@ def build_app(
     ui_dir = Path(__file__).with_name("ui")
     auth = AuthConfig(api_key=api_key or os.getenv("ORBITER_API_KEY"))
     store = create_state_store(db_path)
+    store.register_dag(dag.fingerprint(), dag.name, dag.to_dict())
     queue = create_queue(store, backend=queue_backend, db_target=db_path)
     scheduler = Scheduler(dag, queue, store)
     executor = Executor(dag, queue, store, concurrency=concurrency)
